@@ -81,13 +81,13 @@ export class ReadFileTool extends BaseTool<ReadFileInput, string> {
     return {
       toolName: this.name,
       actionType: 'fs:read',
-      target: path.normalize(input.filePath),
+      target: path.normalize(input.filePath.replace(/\\/g, path.sep)),
       parameters: { offset: input.offset, limit: input.limit },
     };
   }
 
   protected async executeAction(input: ReadFileInput): Promise<string> {
-    const normalizedPath = path.normalize(input.filePath);
+    const normalizedPath = path.normalize(input.filePath.replace(/\\/g, path.sep));
     const exists = await this.fs.exists(normalizedPath);
     if (!exists) {
       throw new ToolExecutionError(this.name, `File not found: '${normalizedPath}'`);

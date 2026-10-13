@@ -57,7 +57,9 @@ export class MultiEditTool extends BaseTool<MultiEditInput, string> {
   }
 
   protected createIntent(input: MultiEditInput): ToolActionIntent {
-    const targets = input.edits.map((e) => path.normalize(e.filePath)).join(', ');
+    const targets = input.edits
+      .map((e) => path.normalize(e.filePath.replace(/\\/g, path.sep)))
+      .join(', ');
     return {
       toolName: this.name,
       actionType: 'fs:write',
@@ -74,7 +76,7 @@ export class MultiEditTool extends BaseTool<MultiEditInput, string> {
     // Phase 1: In-memory validation
     for (let idx = 0; idx < input.edits.length; idx++) {
       const edit = input.edits[idx]!;
-      const normalizedPath = path.normalize(edit.filePath);
+      const normalizedPath = path.normalize(edit.filePath.replace(/\\/g, path.sep));
 
       let content = fileContents.get(normalizedPath);
       if (content === undefined) {

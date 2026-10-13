@@ -49,19 +49,6 @@ export abstract class BaseTool<TInput, TOutput> implements ITool<TInput, TOutput
     const validatedInput = parseResult.data;
     const intent = this.createIntent(validatedInput);
 
-    const gate = this.policyGate as unknown as {
-      check?: (i: ToolActionIntent) => Promise<{ result: string; reason: string }>;
-      evaluate?: (i: ToolActionIntent) => Promise<{ result: string; reason: string }>;
-    };
-    const decision =
-      typeof gate.check === 'function' ? await gate.check(intent) : await gate.evaluate!(intent);
-    if (decision.result === 'deny') {
-      throw new PolicyViolationError(this.name, decision.reason, {
-        intentTarget: intent.target,
-        parameters: intent.parameters,
-      });
-    }
-
     const startMs = Date.now();
     const callId = `call-${startMs}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -81,6 +68,24 @@ export abstract class BaseTool<TInput, TOutput> implements ITool<TInput, TOutput
     }
 
     try {
+      const gate = this.policyGate as unknown as {
+        check?: (i: ToolActionIntent) => Promise<{ result: string; reason: string }>;
+        evaluate?: (i: ToolActionIntent) => Promise<{ result: string; reason: string }>;
+      };
+      const decision =
+        typeof gate.check === 'function' ? await gate.check(intent) : await gate.evaluate!(intent);
+
+      if (decision.result !== 'allow') {
+        const reason =
+          decision.result === 'ask'
+            ? `Action '${this.name}' requires user confirmation: ${decision.reason}`
+            : decision.reason;
+        throw new PolicyViolationError(this.name, reason, {
+          intentTarget: intent.target,
+          parameters: intent.parameters,
+        });
+      }
+
       const output = await this.executeAction(validatedInput);
       const durationMs = Date.now() - startMs;
 

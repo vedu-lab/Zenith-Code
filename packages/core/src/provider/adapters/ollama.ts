@@ -167,8 +167,11 @@ export class OllamaProvider implements IProvider {
             }
 
             if (parsed['done']) {
-              // If native tool calls were not supported, parse text for fallback tool calls!
-              if (!useNativeTools && accumulatedText.includes('<tool_call>')) {
+              // If native tool calls were not emitted, parse text for fallback tool calls
+              if (
+                !toolCallsEmitted &&
+                (accumulatedText.includes('<tool_call>') || accumulatedText.includes('```'))
+              ) {
                 const { toolCalls } = parseFallbackToolCalls(accumulatedText);
                 for (const tc of toolCalls) {
                   toolCallsEmitted = true;

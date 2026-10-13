@@ -54,6 +54,22 @@ describe('BashTool & TodoWriteTool', () => {
 
     const jobsRes = await bash.execute({ command: 'jobs' });
     expect(jobsRes).toContain('sleep 5');
+
+    const killRes = await bash.execute({
+      command: 'kill ' + startRes.split('ID: ')[1]?.split('.')[0],
+    });
+    expect(killRes).toContain('Killed background job');
+  });
+
+  it('bash: should report command failure with exit code and stderr', async () => {
+    const mockRunner: IProcessRunner = {
+      run: async () => ({ stdout: '', stderr: 'command not found: nonexistent', exitCode: 127 }),
+    };
+
+    const bash = new BashTool(mockRunner, mockFs, '/root', 1000, policyGate);
+    const res = await bash.execute({ command: 'nonexistent' });
+    expect(res).toContain('Command failed with exit code 127');
+    expect(res).toContain('command not found: nonexistent');
   });
 
   it('todo_write: should manage task checklist and status symbols', async () => {

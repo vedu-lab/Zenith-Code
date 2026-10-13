@@ -43,13 +43,13 @@ export class WriteFileTool extends BaseTool<WriteFileInput, string> {
     return {
       toolName: this.name,
       actionType: 'fs:write',
-      target: path.normalize(input.filePath),
+      target: path.normalize(input.filePath.replace(/\\/g, path.sep)),
       parameters: { bytes: Buffer.byteLength(input.content, 'utf8') },
     };
   }
 
   protected async executeAction(input: WriteFileInput): Promise<string> {
-    const normalizedPath = path.normalize(input.filePath);
+    const normalizedPath = path.normalize(input.filePath.replace(/\\/g, path.sep));
     const exists = await this.fs.exists(normalizedPath);
 
     if (exists && !this.tracker.hasBeenRead(normalizedPath)) {

@@ -54,4 +54,24 @@ describe('Tool Calling Protocol Fallback', () => {
     expect(toolCalls[0]?.arguments).toEqual({ filePath: 'src/utils.ts' });
     expect(cleanedText).toBe('I will read the file now.\n\nPlease wait.');
   });
+
+  it('should parse markdown JSON code blocks as tool calls when XML tags are not used', () => {
+    const modelOutput = `Sure, let me read the file:
+\`\`\`json
+{
+  "name": "read_file",
+  "arguments": {
+    "filePath": "src/index.ts"
+  }
+}
+\`\`\`
+I will check it right away.`;
+
+    const { toolCalls, cleanedText } = parseFallbackToolCalls(modelOutput);
+
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0]?.name).toBe('read_file');
+    expect(toolCalls[0]?.arguments).toEqual({ filePath: 'src/index.ts' });
+    expect(cleanedText).toContain('Sure, let me read the file:');
+  });
 });

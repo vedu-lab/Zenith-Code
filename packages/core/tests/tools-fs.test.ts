@@ -215,4 +215,38 @@ describe('Filesystem Tools against Real Temp Dir (CRLF & Windows Path cases)', (
     expect(await fs.readFile(file1, 'utf8')).toBe('goodbye world');
     expect(await fs.readFile(file2, 'utf8')).toBe('baz bar');
   });
+
+  it('filesystem tools: should handle Windows backslash paths uniformly with normalization', async () => {
+    const subDir = path.join(tempDir, 'nested');
+    await fs.mkdir(subDir, { recursive: true });
+    const targetFile = path.join(subDir, 'win.txt');
+    await fs.writeFile(targetFile, 'initial windows text\n', 'utf8');
+
+    const readTool = new ReadFileTool(diskFs, tracker, policyGate);
+    const writeTool = new WriteFileTool(diskFs, tracker, policyGate);
+    const editTool = new EditFileTool(diskFs, tracker, policyGate);
+
+    // Pass path using simulated Windows backslashes
+    const winPath = targetFile.replace(/\//g, '\\');
+
+    // 1. Read file with Windows backslash path
+    const readOutput = await readTool.execute({ filePath: winPath });
+    expect(readOutput).toContain('initial windows text');
+    expect(tracker.hasBeenRead(targetFile)).toBe(true);
+
+    // 2. Edit file with Windows backslash path
+    await editTool.execute({
+      filePath: winPath,
+      oldContent: 'initial windows text',
+      newContent: 'updated windows text',
+    });
+    expect(await fs.readFile(targetFile, 'utf8')).toBe('updated windows text\n');
+
+    // 3. Write file with Windows backslash path
+    await writeTool.execute({
+      filePath: winPath,
+      content: 'overwritten windows text\n',
+    });
+    expect(await fs.readFile(targetFile, 'utf8')).toBe('overwritten windows text\n');
+  });
 });

@@ -51,6 +51,50 @@ describe('SystemPromptBuilder & Precedence', () => {
     expect(prompt).toContain('Claude specific instructions');
   });
 
+  it('should fallback to GEMINI.md if AGENTS.md and CLAUDE.md are absent', async () => {
+    const files = new Map<string, string>([
+      ['/workspace/GEMINI.md', 'Gemini specific instructions'],
+      ['/workspace/.cursorrules', 'Cursor rules'],
+    ]);
+
+    const mockFs: IFileSystem = {
+      readFile: async (p) => files.get(p) ?? '',
+      writeFile: async () => {},
+      exists: async (p) => files.has(p),
+      mkdir: async () => {},
+      readDir: async () => [],
+      stat: async () => ({ size: 0, isDirectory: false, mtimeMs: 0 }),
+      preserveLineEndings: (_o, n) => n,
+    };
+
+    const builder = new SystemPromptBuilder(mockFs, '/workspace');
+    const prompt = await builder.build();
+
+    expect(prompt).toContain('[Loaded from GEMINI.md]');
+    expect(prompt).toContain('Gemini specific instructions');
+    expect(prompt).not.toContain('Cursor rules');
+  });
+
+  it('should fallback to .cursorrules if all others are absent', async () => {
+    const files = new Map<string, string>([['/workspace/.cursorrules', 'Cursor rules']]);
+
+    const mockFs: IFileSystem = {
+      readFile: async (p) => files.get(p) ?? '',
+      writeFile: async () => {},
+      exists: async (p) => files.has(p),
+      mkdir: async () => {},
+      readDir: async () => [],
+      stat: async () => ({ size: 0, isDirectory: false, mtimeMs: 0 }),
+      preserveLineEndings: (_o, n) => n,
+    };
+
+    const builder = new SystemPromptBuilder(mockFs, '/workspace');
+    const prompt = await builder.build();
+
+    expect(prompt).toContain('[Loaded from .cursorrules]');
+    expect(prompt).toContain('Cursor rules');
+  });
+
   it('should support strict and compact variants for small models', async () => {
     const mockFs: IFileSystem = {
       readFile: async () => '',

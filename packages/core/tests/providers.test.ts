@@ -247,6 +247,29 @@ describe('Provider Adapters (Recorded Fixtures & Mock Streams)', () => {
     expect(events.some((e) => (e as { delta: string }).delta === 'Backup response')).toBe(true);
   });
 
+  it('FailoverProvider: should throw error when all providers fail', async () => {
+    const p1 = {
+      name: 'provider-1',
+      stream: async function* () {
+        throw new Error('P1 network down');
+      },
+    };
+    const p2 = {
+      name: 'provider-2',
+      stream: async function* () {
+        throw new Error('P2 quota exceeded');
+      },
+    };
+
+    const failover = new FailoverProvider([p1, p2]);
+
+    await expect(async () => {
+      for await (const _ of failover.stream([{ role: 'user', content: 'test' }], [])) {
+        // stream
+      }
+    }).rejects.toThrow('P2 quota exceeded');
+  });
+
   it('ProviderManager: should resolve configured models per role', () => {
     const config = ForgeConfigSchema.parse({
       models: {

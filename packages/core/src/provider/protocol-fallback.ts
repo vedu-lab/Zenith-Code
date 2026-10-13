@@ -37,12 +37,13 @@ export function parseFallbackToolCalls(text: string): {
     const rawJson = match[1]?.trim() ?? '';
     try {
       const parsed = JSON.parse(rawJson) as Record<string, unknown>;
-      if (typeof parsed['name'] === 'string') {
+      const name = parsed['name'] ?? parsed['tool'] ?? parsed['function'];
+      if (typeof name === 'string') {
         const id = `call-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         toolCalls.push({
           id,
-          name: parsed['name'],
-          arguments: (parsed['arguments'] as Record<string, unknown>) ?? {},
+          name,
+          arguments: (parsed['arguments'] ?? parsed['parameters'] ?? {}) as Record<string, unknown>,
         });
       }
     } catch {
@@ -50,7 +51,34 @@ export function parseFallbackToolCalls(text: string): {
     }
   }
 
-  const cleanedText = text.replace(regex, '').trim();
+  if (toolCalls.length === 0) {
+    const fenceRegex = /```(?:json|tool_call)?\s*(\{\s*"(?:name|tool|function)"[\s\S]*?\})\s*```/gi;
+    while ((match = fenceRegex.exec(text)) !== null) {
+      const rawJson = match[1]?.trim() ?? '';
+      try {
+        const parsed = JSON.parse(rawJson) as Record<string, unknown>;
+        const name = parsed['name'] ?? parsed['tool'] ?? parsed['function'];
+        if (typeof name === 'string') {
+          const id = `call-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          toolCalls.push({
+            id,
+            name,
+            arguments: (parsed['arguments'] ?? parsed['parameters'] ?? {}) as Record<
+              string,
+              unknown
+            >,
+          });
+        }
+      } catch {
+        // Incomplete or invalid JSON
+      }
+    }
+  }
+
+  const cleanedText = text
+    .replace(regex, '')
+    .replace(/```(?:json|tool_call)?\s*\{\s*"(?:name|tool|function)"[\s\S]*?\}\s*```/gi, '')
+    .trim();
   return { toolCalls, cleanedText };
 }
 

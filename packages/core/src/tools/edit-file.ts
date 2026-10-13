@@ -96,7 +96,7 @@ export class EditFileTool extends BaseTool<EditFileInput, string> {
     return {
       toolName: this.name,
       actionType: 'fs:write',
-      target: path.normalize(input.filePath),
+      target: path.normalize(input.filePath.replace(/\\/g, path.sep)),
       parameters: {
         oldContentLength: input.oldContent.length,
         newContentLength: input.newContent.length,
@@ -105,7 +105,7 @@ export class EditFileTool extends BaseTool<EditFileInput, string> {
   }
 
   protected async executeAction(input: EditFileInput): Promise<string> {
-    const normalizedPath = path.normalize(input.filePath);
+    const normalizedPath = path.normalize(input.filePath.replace(/\\/g, path.sep));
     const exists = await this.fs.exists(normalizedPath);
     if (!exists) {
       throw new ToolExecutionError(this.name, `File not found: '${normalizedPath}'`);

@@ -3,14 +3,17 @@ import path from 'node:path';
 export class FileReadTracker {
   private readonly readPaths = new Set<string>();
 
+  private normalize(filePath: string): string {
+    const crossPlatform = filePath.replace(/\\/g, path.sep);
+    return path.normalize(path.resolve(crossPlatform));
+  }
+
   markRead(filePath: string): void {
-    const normalized = path.normalize(path.resolve(filePath));
-    this.readPaths.add(normalized);
+    this.readPaths.add(this.normalize(filePath));
   }
 
   hasBeenRead(filePath: string): boolean {
-    const normalized = path.normalize(path.resolve(filePath));
-    return this.readPaths.has(normalized);
+    return this.readPaths.has(this.normalize(filePath));
   }
 
   clear(): void {
