@@ -1,12 +1,32 @@
 export enum ErrorCode {
   UNKNOWN = 'CORE_UNKNOWN',
   INVALID_ARGUMENT = 'CORE_INVALID_ARGUMENT',
+  CONFIG_ERROR = 'CORE_CONFIG_ERROR',
   POLICY_VIOLATION = 'SAFETY_POLICY_VIOLATION',
   CAPABILITY_MISSING = 'SAFETY_CAPABILITY_MISSING',
-  TOOL_EXECUTION_FAILED = 'TOOL_EXECUTION_FAILED',
-  TOOL_NOT_FOUND = 'TOOL_NOT_FOUND',
+
+  // Provider error codes
   PROVIDER_ERROR = 'PROVIDER_ERROR',
-  PROVIDER_RATE_LIMITED = 'PROVIDER_RATE_LIMITED',
+  PROVIDER_AUTH_ERROR = 'PROVIDER_AUTH_ERROR',
+  PROVIDER_RATE_LIMIT = 'PROVIDER_RATE_LIMIT',
+  PROVIDER_CONTEXT_OVERFLOW = 'PROVIDER_CONTEXT_OVERFLOW',
+  PROVIDER_NETWORK_ERROR = 'PROVIDER_NETWORK_ERROR',
+  PROVIDER_TIMEOUT = 'PROVIDER_TIMEOUT',
+
+  // Tool error codes
+  TOOL_EXECUTION_FAILED = 'TOOL_EXECUTION_FAILED',
+  TOOL_VALIDATION_ERROR = 'TOOL_VALIDATION_ERROR',
+  TOOL_NOT_FOUND = 'TOOL_NOT_FOUND',
+  FILE_NOT_READ_BEFORE_WRITE = 'FILE_NOT_READ_BEFORE_WRITE',
+  BINARY_FILE_REFUSED = 'BINARY_FILE_REFUSED',
+  EDIT_NO_MATCH = 'EDIT_NO_MATCH',
+  EDIT_MULTIPLE_MATCHES = 'EDIT_MULTIPLE_MATCHES',
+
+  // Agent loop error codes
+  AGENT_MAX_TURNS_EXCEEDED = 'AGENT_MAX_TURNS_EXCEEDED',
+  AGENT_INTERRUPTED = 'AGENT_INTERRUPTED',
+
+  // State error codes
   CHECKPOINT_ERROR = 'STATE_CHECKPOINT_ERROR',
   SESSION_ERROR = 'STATE_SESSION_ERROR',
   IO_ERROR = 'IO_ERROR',
@@ -16,8 +36,8 @@ export interface ForgeErrorOptions {
   readonly code: ErrorCode;
   readonly message: string;
   readonly cause?: unknown;
-  readonly context?: Readonly<Record<string, unknown>>;
-  readonly remediation?: string;
+  readonly context?: Readonly<Record<string, unknown>> | undefined;
+  readonly remediation?: string | undefined;
 }
 
 export class ForgeError extends Error {
@@ -65,14 +85,42 @@ export class ToolExecutionError extends ForgeError {
 }
 
 export class ProviderError extends ForgeError {
-  constructor(providerName: string, message: string, cause?: unknown) {
+  readonly isRetryable: boolean;
+
+  constructor(
+    providerName: string,
+    message: string,
+    options: {
+      code?: ErrorCode;
+      cause?: unknown;
+      isRetryable?: boolean;
+      statusCode?: number;
+      context?: Readonly<Record<string, unknown>>;
+    } = {},
+  ) {
     super({
-      code: ErrorCode.PROVIDER_ERROR,
+      code: options.code ?? ErrorCode.PROVIDER_ERROR,
       message: `LLM Provider '${providerName}' error: ${message}`,
-      cause,
-      context: { providerName },
+      cause: options.cause,
+      context: { providerName, statusCode: options.statusCode, ...options.context },
+      remediation: options.isRetryable
+        ? 'Request can be retried with exponential backoff.'
+        : 'Check your API key, endpoint URL, or account quotas.',
     });
     this.name = 'ProviderError';
+    this.isRetryable = options.isRetryable ?? false;
+  }
+}
+
+export class ConfigError extends ForgeError {
+  constructor(message: string, context?: Readonly<Record<string, unknown>>) {
+    super({
+      code: ErrorCode.CONFIG_ERROR,
+      message: `Configuration error: ${message}`,
+      context,
+      remediation: 'Verify config file format or environment variable settings.',
+    });
+    this.name = 'ConfigError';
   }
 }
 

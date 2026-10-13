@@ -18,6 +18,10 @@ export class PolicyEngine implements IPolicyEngine {
     this.rules.unshift(rule); // user rules have precedence
   }
 
+  async check(intent: ToolActionIntent): Promise<PolicyDecision> {
+    return this.evaluate(intent);
+  }
+
   async evaluate(intent: ToolActionIntent): Promise<PolicyDecision> {
     for (const rule of this.rules) {
       const decision = rule.evaluate(intent);

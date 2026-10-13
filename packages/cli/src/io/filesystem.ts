@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { IFileSystem } from '@forge/core';
+import { IFileSystem, FileStatResult } from '@forge/core';
 
 export class NodeFileSystem implements IFileSystem {
   async readFile(filePath: string): Promise<string> {
@@ -27,6 +27,21 @@ export class NodeFileSystem implements IFileSystem {
   async mkdir(dirPath: string): Promise<void> {
     const resolved = path.resolve(dirPath);
     await fs.mkdir(resolved, { recursive: true });
+  }
+
+  async readDir(dirPath: string): Promise<readonly string[]> {
+    const resolved = path.resolve(dirPath);
+    return fs.readdir(resolved);
+  }
+
+  async stat(filePath: string): Promise<FileStatResult> {
+    const resolved = path.resolve(filePath);
+    const s = await fs.stat(resolved);
+    return {
+      size: s.size,
+      isDirectory: s.isDirectory(),
+      mtimeMs: s.mtimeMs,
+    };
   }
 
   preserveLineEndings(originalContent: string, newContent: string): string {

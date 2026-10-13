@@ -68,6 +68,9 @@ importers:
 
   packages/core:
     dependencies:
+      ignore:
+        specifier: ^7.0.12
+        version: 7.0.12
       zod:
         specifier: ^3.24.2
         version: 3.25.76

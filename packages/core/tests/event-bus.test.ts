@@ -1,76 +1,99 @@
 import { describe, it, expect, vi } from 'vitest';
-import { CoreEventBus, ForgeEvent, StateTransitionEvent } from '../src/events/index.js';
+import { CoreEventBus, TurnStartedEvent, FileWrittenEvent } from '../src/events/index.js';
 
 describe('CoreEventBus', () => {
-  it('should publish and receive typed events', async () => {
+  it('should dispatch to sync and async subscribers', async () => {
     const bus = new CoreEventBus();
-    const handler = vi.fn();
+    const syncCalls: string[] = [];
+    const asyncCalls: string[] = [];
 
-    const unsubscribe = bus.subscribe('state:transition', handler);
+    bus.subscribeSync('turn.started', (evt) => {
+      syncCalls.push(evt.payload.sessionId);
+    });
 
-    const event: StateTransitionEvent = {
-      id: 'evt-1',
-      type: 'state:transition',
-      timestamp: 1000,
-      actor: 'system',
-      payload: {
-        entity: 'session',
-        entityId: 'sess-123',
-        fromState: 'idle',
-        toState: 'busy',
-        reason: 'agent loop started',
-      },
-    };
+    bus.subscribe('turn.started', async (evt) => {
+      await new Promise((r) => setTimeout(r, 5));
+      asyncCalls.push(evt.payload.sessionId);
+    });
 
-    await bus.publish(event);
-
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(event);
-
-    unsubscribe();
-    await bus.publish(event);
-    expect(handler).toHaveBeenCalledTimes(1);
-  });
-
-  it('should notify global subscribers for all event types', async () => {
-    const bus = new CoreEventBus();
-    const globalHandler = vi.fn();
-
-    bus.subscribeAll(globalHandler);
-
-    const event: ForgeEvent = {
-      id: 'evt-2',
-      type: 'agent:step',
-      timestamp: 2000,
+    const event: TurnStartedEvent = {
+      id: 'turn-1',
+      type: 'turn.started',
+      timestamp: Date.now(),
       actor: 'agent',
-      payload: {
-        stepNumber: 1,
-        message: 'Thinking...',
-      },
+      payload: { turnIndex: 1, sessionId: 'sess-abc', model: 'claude-3-5-sonnet' },
     };
 
     await bus.publish(event);
 
-    expect(globalHandler).toHaveBeenCalledWith(event);
-    expect(bus.getHistory()).toHaveLength(1);
+    expect(syncCalls).toEqual(['sess-abc']);
+    expect(asyncCalls).toEqual(['sess-abc']);
   });
 
-  it('should cap history to maxHistorySize', async () => {
-    const bus = new CoreEventBus(2);
+  it('should support publishSync without waiting for async subscribers', () => {
+    const bus = new CoreEventBus();
+    const syncFn = vi.fn();
+    const asyncFn = vi.fn().mockImplementation(async () => {});
 
-    for (let i = 1; i <= 3; i++) {
+    bus.subscribeSync('file.written', syncFn);
+    bus.subscribe('file.written', asyncFn);
+
+    const event: FileWrittenEvent = {
+      id: 'fw-1',
+      type: 'file.written',
+      timestamp: Date.now(),
+      actor: 'tool',
+      payload: { filePath: 'src/main.ts', byteCount: 100, isNew: true },
+    };
+
+    bus.publishSync(event);
+
+    expect(syncFn).toHaveBeenCalledTimes(1);
+    expect(asyncFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should isolate errors in handlers from crashing event publisher', async () => {
+    const bus = new CoreEventBus();
+
+    bus.subscribeSync('turn.started', () => {
+      throw new Error('Explosion in sync handler');
+    });
+
+    bus.subscribe('turn.started', async () => {
+      throw new Error('Explosion in async handler');
+    });
+
+    const event: TurnStartedEvent = {
+      id: 'turn-2',
+      type: 'turn.started',
+      timestamp: Date.now(),
+      actor: 'agent',
+      payload: { turnIndex: 1, sessionId: 'sess-xyz', model: 'gpt-4o' },
+    };
+
+    // publish should not throw!
+    await expect(bus.publish(event)).resolves.not.toThrow();
+  });
+
+  it('should manage history buffer', async () => {
+    const bus = new CoreEventBus(3);
+
+    for (let i = 1; i <= 5; i++) {
       await bus.publish({
         id: `evt-${i}`,
-        type: 'agent:step',
+        type: 'turn.started',
         timestamp: i,
         actor: 'agent',
-        payload: { stepNumber: i, message: `step ${i}` },
+        payload: { turnIndex: i, sessionId: `s-${i}`, model: 'test' },
       });
     }
 
     const history = bus.getHistory();
-    expect(history).toHaveLength(2);
-    expect(history[0]?.id).toBe('evt-2');
-    expect(history[1]?.id).toBe('evt-3');
+    expect(history).toHaveLength(3);
+    expect(history[0]?.id).toBe('evt-3');
+    expect(history[2]?.id).toBe('evt-5');
+
+    bus.clearHistory();
+    expect(bus.getHistory()).toHaveLength(0);
   });
 });

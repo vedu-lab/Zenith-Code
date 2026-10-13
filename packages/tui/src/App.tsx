@@ -20,13 +20,13 @@ export const App: React.FC<AppProps> = ({ version, model, eventBus }) => {
     const unsubscribe = eventBus.subscribeAll((event) => {
       setEvents((prev) => [...prev.slice(-9), event]);
 
-      if (event.type === 'agent:step') {
+      if (event.type === 'turn.started') {
         setCurrentStatus('running');
-      } else if (event.type === 'tool:proposed') {
+      } else if (event.type === 'tool.requested') {
         setCurrentStatus('waiting_approval');
-      } else if (event.type === 'tool:executed') {
+      } else if (event.type === 'tool.executed') {
         setCurrentStatus('running');
-      } else if (event.type === 'session:closed') {
+      } else if (event.type === 'session:closed' || event.type === 'turn.completed') {
         setCurrentStatus('idle');
       }
     });
