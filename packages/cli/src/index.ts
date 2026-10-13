@@ -4,15 +4,18 @@ export * from './bootstrap.js';
 
 import path from 'node:path';
 import { PolicyMode, runSandboxDoctor, verifyAuditFile } from '@forge/safety';
+import { initProject, CostEstimator } from '@forge/state';
 import { bootstrapApp } from './bootstrap.js';
 
 export interface CliArgs {
-  readonly command: 'run' | 'doctor' | 'caps' | 'audit';
+  readonly command: 'run' | 'doctor' | 'caps' | 'audit' | 'init' | 'usage';
   readonly subcommand?: string | undefined;
   readonly task: string;
   readonly headless: boolean;
   readonly json: boolean;
   readonly offline: boolean;
+  readonly estimate: boolean;
+  readonly since?: string | undefined;
   readonly mode?: PolicyMode | undefined;
   readonly model?: string | undefined;
   readonly maxTurns?: number | undefined;
@@ -21,12 +24,14 @@ export interface CliArgs {
 
 export function parseCliArgs(argv: readonly string[]): CliArgs {
   const args = [...argv];
-  let command: 'run' | 'doctor' | 'caps' | 'audit' = 'run';
+  let command: 'run' | 'doctor' | 'caps' | 'audit' | 'init' | 'usage' = 'run';
   let subcommand: string | undefined = undefined;
   let task = '';
   let headless = false;
   let json = false;
   let offline = false;
+  let estimate = false;
+  let since: string | undefined = undefined;
   let mode: PolicyMode | undefined = undefined;
   let model: string | undefined = undefined;
   let maxTurns: number | undefined = undefined;
@@ -38,6 +43,10 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
       command = 'run';
     } else if (arg === 'doctor') {
       command = 'doctor';
+    } else if (arg === 'init') {
+      command = 'init';
+    } else if (arg === 'usage') {
+      command = 'usage';
     } else if (arg === 'caps') {
       command = 'caps';
       if (i + 1 < args.length && !args[i + 1]!.startsWith('-')) {
@@ -54,6 +63,10 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
       json = true;
     } else if (arg === '--offline') {
       offline = true;
+    } else if (arg === '--estimate') {
+      estimate = true;
+    } else if (arg === '--since' && i + 1 < args.length) {
+      since = args[++i];
     } else if (arg === '--mode' && i + 1 < args.length) {
       mode = args[++i] as PolicyMode;
     } else if (arg === '--model' && i + 1 < args.length) {
@@ -76,6 +89,8 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
     headless,
     json,
     offline,
+    estimate,
+    since,
     mode,
     model,
     maxTurns,
@@ -166,13 +181,103 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  // Command 4: forge run "<task>"
+  // Command 4: forge init
+  if (parsed.command === 'init') {
+    const result = await initProject({ projectRoot: process.cwd() });
+    if (parsed.json) {
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      // eslint-disable-next-line no-console
+      console.log('=== Forge Project Initialization ===');
+      if (result.generatedFiles.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(`Generated: ${result.generatedFiles.join(', ')}`);
+      }
+      if (result.syncedFiles.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(`Synced: ${result.syncedFiles.join(', ')}`);
+      }
+      if (result.contradictions.length > 0) {
+        console.warn('Contradictions detected:');
+        for (const c of result.contradictions) {
+          console.warn(`  - ${c}`);
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('No instruction contradictions detected.');
+      }
+    }
+    process.exitCode = 0;
+    return;
+  }
+
+  // Command 5: forge usage [--since <period>] [--json]
+  if (parsed.command === 'usage') {
+    const container = await bootstrapApp();
+    const period = parsed.since ?? '7d';
+    const report = container.usageLedger.queryUsage({ since: period });
+    if (parsed.json) {
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(`=== Forge Usage Ledger (Since: ${period}) ===`);
+      // eslint-disable-next-line no-console
+      console.log(`Total Records: ${report.recordsCount}`);
+      // eslint-disable-next-line no-console
+      console.log(`Prompt Tokens: ${report.totalPromptTokens.toLocaleString()}`);
+      // eslint-disable-next-line no-console
+      console.log(`Completion Tokens: ${report.totalCompletionTokens.toLocaleString()}`);
+      // eslint-disable-next-line no-console
+      console.log(`Total Tokens: ${report.totalTokens.toLocaleString()}`);
+      // eslint-disable-next-line no-console
+      console.log(`Total Cost: $${report.totalCostUsd.toFixed(4)} USD`);
+      // eslint-disable-next-line no-console
+      console.log(`Avg Latency: ${report.averageLatencyMs.toFixed(1)} ms`);
+    }
+    process.exitCode = 0;
+    return;
+  }
+
+  // Command 6: forge run "<task>"
   if (!parsed.task) {
     // eslint-disable-next-line no-console
     console.log(
-      'Usage: forge run "<task>" [--headless] [--json] [--offline] [--mode default|acceptEdits|plan|bypass] [--model <name>] [--max-turns <n>]',
+      'Usage: forge run "<task>" [--estimate] [--headless] [--json] [--offline] [--mode default|acceptEdits|plan|bypass] [--model <name>] [--max-turns <n>]',
     );
     process.exitCode = 2;
+    return;
+  }
+
+  if (parsed.estimate) {
+    const model = parsed.model ?? 'claude-3-5-sonnet';
+    const estimator = new CostEstimator();
+    const est = estimator.estimate(parsed.task, model);
+    if (parsed.json) {
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify(est, null, 2));
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(`=== Cost Estimate for: "${parsed.task}" ===`);
+      // eslint-disable-next-line no-console
+      console.log(`Model: ${model}`);
+      // eslint-disable-next-line no-console
+      console.log(
+        `Cost Range: $${est.low.toFixed(4)} - $${est.high.toFixed(4)} USD (Expected: $${est.expected.toFixed(4)})`,
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `Estimated Tokens: ~${est.tokensEstimated.input} in / ~${est.tokensEstimated.output} out`,
+      );
+      // eslint-disable-next-line no-console
+      console.log('Assumptions:');
+      for (const a of est.assumptions) {
+        // eslint-disable-next-line no-console
+        console.log(`  - ${a}`);
+      }
+    }
+    process.exitCode = 0;
     return;
   }
 

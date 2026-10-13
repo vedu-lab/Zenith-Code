@@ -34,7 +34,17 @@ import {
   SecretRedactor,
   OfflineGuard,
 } from '@forge/safety';
-import { SessionManager, CheckpointStore, UsageLedger, SqliteStore } from '@forge/state';
+import {
+  SessionManager,
+  CheckpointStore,
+  UsageLedger,
+  SqliteStore,
+  ProjectMemoryStore,
+  CostEstimator,
+  BudgetEnforcer,
+  CodeIndex,
+  CodeSearchTool,
+} from '@forge/state';
 import { NodeFileSystem } from './io/filesystem.js';
 import { ExecaProcessRunner } from './io/process-runner.js';
 
@@ -52,6 +62,10 @@ export interface ForgeAppContainer {
   readonly sessionManager: SessionManager;
   readonly checkpointStore: CheckpointStore;
   readonly usageLedger: UsageLedger;
+  readonly projectMemoryStore: ProjectMemoryStore;
+  readonly costEstimator: CostEstimator;
+  readonly budgetEnforcer: BudgetEnforcer;
+  readonly codeIndex: CodeIndex;
   readonly sqliteStore: SqliteStore;
   readonly fileTracker: FileReadTracker;
   readonly tools: ToolRegistry;
@@ -136,8 +150,24 @@ export async function bootstrapApp(options: BootstrapOptions = {}): Promise<Forg
   // State Management
   const sqliteStore = new SqliteStore({ filename: options.sqlitePath ?? ':memory:' });
   const sessionManager = new SessionManager(clock, eventBus);
-  const checkpointStore = new CheckpointStore(clock, eventBus, fs);
-  const usageLedger = new UsageLedger(clock, eventBus);
+  const checkpointStore = new CheckpointStore(clock, eventBus, {
+    fs,
+    workspaceRoot: projectRoot,
+    processRunner,
+  });
+  const usageLedger = new UsageLedger(clock, {
+    eventBus,
+    sqliteStore,
+  });
+  const projectMemoryStore = new ProjectMemoryStore(clock, {
+    workspaceRoot: projectRoot,
+    sqliteStore,
+  });
+  const costEstimator = new CostEstimator();
+  const budgetEnforcer = new BudgetEnforcer();
+  const codeIndex = new CodeIndex({ workspaceRoot: projectRoot });
+
+  tools.register(new CodeSearchTool(codeIndex, policyGate, eventBus));
 
   // Engine & Prompt
   const promptBuilder = new SystemPromptBuilder(fs, projectRoot);
@@ -158,6 +188,10 @@ export async function bootstrapApp(options: BootstrapOptions = {}): Promise<Forg
     sessionManager,
     checkpointStore,
     usageLedger,
+    projectMemoryStore,
+    costEstimator,
+    budgetEnforcer,
+    codeIndex,
     sqliteStore,
     fileTracker,
     tools,

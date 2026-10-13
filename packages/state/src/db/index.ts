@@ -5,8 +5,15 @@ export interface SqliteStoreOptions {
   readonly readonly?: boolean;
 }
 
+export interface ISqliteStatement {
+  run(...args: unknown[]): unknown;
+  all(...args: unknown[]): unknown[];
+  get(...args: unknown[]): unknown;
+}
+
 export interface ISqliteDatabase {
   exec(sql: string): void;
+  prepare(sql: string): ISqliteStatement;
   pragma(sql: string): unknown;
   close(): void;
 }
@@ -16,6 +23,14 @@ class InMemoryFallbackDatabase implements ISqliteDatabase {
 
   exec(sql: string): void {
     this.executedSql.push(sql);
+  }
+
+  prepare(_sql: string): ISqliteStatement {
+    return {
+      run: () => ({}),
+      all: () => [],
+      get: () => undefined,
+    };
   }
 
   pragma(_sql: string): unknown {
