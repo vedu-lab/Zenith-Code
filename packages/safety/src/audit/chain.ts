@@ -28,7 +28,11 @@ export function computeEntryHash(
 }
 
 export class AuditHashChain {
-  private readonly entries: AuditEntry[] = [];
+  private readonly entries: AuditEntry[];
+
+  constructor(initialEntries: readonly AuditEntry[] = []) {
+    this.entries = [...initialEntries];
+  }
 
   append(type: AuditEventType, payload: Record<string, unknown>): AuditEntry {
     const index = this.entries.length;

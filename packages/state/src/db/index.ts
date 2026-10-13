@@ -42,6 +42,38 @@ class InMemoryFallbackDatabase implements ISqliteDatabase {
   }
 }
 
+import { createRequire } from 'node:module';
+
+class NodeSqliteWrapper implements ISqliteDatabase {
+  constructor(private readonly db: { exec(sql: string): void; prepare(sql: string): { run(...args: unknown[]): unknown; all(...args: unknown[]): unknown[]; get(...args: unknown[]): unknown }; close(): void }) {}
+
+  exec(sql: string): void {
+    this.db.exec(sql);
+  }
+
+  prepare(sql: string): ISqliteStatement {
+    const stmt = this.db.prepare(sql);
+    return {
+      run: (...args: unknown[]) => stmt.run(...args),
+      all: (...args: unknown[]) => stmt.all(...args),
+      get: (...args: unknown[]) => stmt.get(...args),
+    };
+  }
+
+  pragma(sql: string): unknown {
+    try {
+      this.db.exec(`PRAGMA ${sql};`);
+      return 'WAL';
+    } catch {
+      return undefined;
+    }
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}
+
 export class SqliteStore {
   private readonly db: ISqliteDatabase;
 
@@ -50,8 +82,17 @@ export class SqliteStore {
     try {
       this.db = new Database(filename, { readonly: options.readonly ?? false });
     } catch {
-      // Graceful fallback when native C++ bindings are unavailable (e.g. unreleased Node versions)
-      this.db = new InMemoryFallbackDatabase();
+      try {
+        const req = createRequire(import.meta.url);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const { DatabaseSync } = req('node:sqlite');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        const dbSync = new DatabaseSync(filename, { readOnly: options.readonly ?? false });
+        this.db = new NodeSqliteWrapper(dbSync);
+      } catch {
+        // Graceful fallback when native C++ bindings are unavailable (e.g. unreleased Node versions)
+        this.db = new InMemoryFallbackDatabase();
+      }
     }
     this.initSchema();
   }

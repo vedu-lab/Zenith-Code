@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fsSync from 'node:fs';
 import {
   SystemClock,
   CoreEventBus,
@@ -148,7 +149,16 @@ export async function bootstrapApp(options: BootstrapOptions = {}): Promise<Forg
   tools.register(new TodoWriteTool(policyGate, eventBus));
 
   // State Management
-  const sqliteStore = new SqliteStore({ filename: options.sqlitePath ?? ':memory:' });
+  const dbDir = path.join(projectRoot, '.forge');
+  if (!fsSync.existsSync(dbDir)) {
+    try {
+      fsSync.mkdirSync(dbDir, { recursive: true });
+    } catch {
+      // Ignore
+    }
+  }
+  const defaultDbPath = path.join(dbDir, 'state.db');
+  const sqliteStore = new SqliteStore({ filename: options.sqlitePath ?? defaultDbPath });
   const sessionManager = new SessionManager(clock, eventBus);
   const checkpointStore = new CheckpointStore(clock, eventBus, {
     fs,

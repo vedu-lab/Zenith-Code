@@ -52,6 +52,22 @@ export class UsageLedger {
     this.eventBus = options.eventBus;
 
     this.initDb();
+
+    if (this.eventBus) {
+      this.eventBus.subscribe('usage.updated', (event) => {
+        if (event.type === 'usage.updated' && event.actor !== 'ledger') {
+          const payload = event.payload;
+          void this.recordUsage({
+            sessionId: payload.sessionId,
+            model: payload.model,
+            promptTokens: payload.inputTokens,
+            completionTokens: payload.outputTokens,
+            cacheReadTokens: payload.cacheReadTokens,
+            cacheWriteTokens: payload.cacheWriteTokens,
+          });
+        }
+      });
+    }
   }
 
   private initDb(): void {
@@ -82,6 +98,37 @@ export class UsageLedger {
           timestamp INTEGER NOT NULL
         );
       `);
+
+      const rows = this.db
+        .prepare('SELECT * FROM usage_records ORDER BY timestamp ASC')
+        .all() as Array<{
+        id: string;
+        session_id: string;
+        timestamp: number;
+        model: string;
+        prompt_tokens: number;
+        completion_tokens: number;
+        cache_read_tokens?: number | undefined;
+        cache_write_tokens?: number | undefined;
+        total_tokens: number;
+        cost_usd: number;
+        latency_ms?: number | undefined;
+      }>;
+      for (const row of rows) {
+        this.entries.push({
+          id: row.id,
+          sessionId: row.session_id,
+          timestamp: row.timestamp,
+          model: row.model,
+          promptTokens: row.prompt_tokens,
+          completionTokens: row.completion_tokens,
+          cacheReadTokens: row.cache_read_tokens ?? 0,
+          cacheWriteTokens: row.cache_write_tokens ?? 0,
+          totalTokens: row.total_tokens,
+          costUsd: row.cost_usd,
+          latencyMs: row.latency_ms ?? 0,
+        });
+      }
     } catch {
       // Fallback
     }

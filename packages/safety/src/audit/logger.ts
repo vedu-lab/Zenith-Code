@@ -18,16 +18,35 @@ export class AuditLogger {
   private isEnabled = true;
 
   constructor(options: AuditLoggerOptions = {}) {
-    this.chain = new AuditHashChain();
-    this.redactor = options.secretRedactor ?? new SecretRedactor();
+    let initialEntries: readonly AuditEntry[] = [];
     this.filePath = options.filePath;
 
     if (this.filePath) {
       const dir = path.dirname(this.filePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
+      } else if (fs.existsSync(this.filePath)) {
+        try {
+          const raw = fs.readFileSync(this.filePath, 'utf8');
+          const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
+          const loaded: AuditEntry[] = [];
+          for (const line of lines) {
+            loaded.push(JSON.parse(line) as AuditEntry);
+          }
+          if (loaded.length > 0) {
+            const check = AuditHashChain.verifyEntries(loaded);
+            if (check.valid) {
+              initialEntries = loaded;
+            }
+          }
+        } catch {
+          // Keep empty if unreadable
+        }
       }
     }
+
+    this.chain = new AuditHashChain(initialEntries);
+    this.redactor = options.secretRedactor ?? new SecretRedactor();
 
     if (options.eventBus) {
       this.attachToEventBus(options.eventBus);
