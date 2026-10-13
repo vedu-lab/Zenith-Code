@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/safety" },
+    { "path": "./packages/state" },
+    { "path": "./packages/tui" },
+    { "path": "./packages/vscode" },
+    { "path": "./packages/cli" },
+    { "path": "./packages/bench" }
+  ]
+}
