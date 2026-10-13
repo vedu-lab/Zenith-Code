@@ -1,4 +1,4 @@
-# Forge
+# Zenith Code
 
 <p align="center">
   <strong>An open-source, model-agnostic terminal AI coding agent inspired by Claude Code.</strong><br>
@@ -55,9 +55,11 @@ docker run --rm -it -v $(pwd):/workspace ghcr.io/forge-agent/forge:latest run "I
 
 ### 1. Interactive Terminal UI
 
-Run Forge in your current project workspace:
+Run Zenith Code in your current project workspace:
 
 ```bash
+zenith run "Implement JWT refresh tokens in auth/service.ts and add vitest tests"
+# or
 forge run "Implement JWT refresh tokens in auth/service.ts and add vitest tests"
 ```
 

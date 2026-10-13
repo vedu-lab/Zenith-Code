@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "bin": {
+    "zenith": "./bin/zenith.js",
     "forge": "./bin/forge.js"
   },
   "main": "./dist/index.js",

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-- **Name**: `forge` (working name)
+- **Name**: Zenith Code (cli: `zenith` / `forge`)
 - **Description**: An open-source, model-agnostic (cloud + local) terminal AI coding agent inspired by Claude Code.
 - **Foundational Principles**:
   - **Safe by default**: Sandboxed execution, capability-based permissions, explicit approval policies, and structured audit logs.
