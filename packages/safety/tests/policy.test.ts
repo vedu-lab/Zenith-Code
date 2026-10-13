@@ -1,23 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { SystemClock } from '@forge/core';
 import { CapabilityManager } from '../src/capabilities/index.js';
 import { PolicyEngine } from '../src/policy/index.js';
 import { AuditLogger } from '../src/audit/index.js';
 
-describe('Safety Package', () => {
+describe('Safety Package Base Tests', () => {
   describe('CapabilityManager', () => {
     it('should manage capabilities correctly', () => {
       const caps = new CapabilityManager();
       expect(caps.hasCapability('fs:read')).toBe(false);
 
       caps.grant('fs:read', 'src/*');
-      expect(caps.hasCapability('fs:read', 'src/*')).toBe(true);
-      expect(caps.hasCapability('fs:read', 'docs/*')).toBe(false);
+      expect(caps.hasCapability('fs:read', 'src/app.ts')).toBe(true);
+      expect(caps.hasCapability('fs:read', 'docs/readme.md')).toBe(false);
 
       caps.grant('fs:write', '*');
       expect(caps.hasCapability('fs:write', 'anything')).toBe(true);
 
-      caps.revoke('fs:write', '*');
+      caps.revokeAction('fs:write', '*');
       expect(caps.hasCapability('fs:write', 'anything')).toBe(false);
     });
   });
@@ -36,7 +35,7 @@ describe('Safety Package', () => {
       });
 
       expect(decision.result).toBe('deny');
-      expect(decision.reason).toContain('strictly denied');
+      expect(decision.reason).toContain('blocked');
     });
 
     it('should deny destructive commands', async () => {
@@ -52,7 +51,7 @@ describe('Safety Package', () => {
       });
 
       expect(decision.result).toBe('deny');
-      expect(decision.reason).toContain('destructive');
+      expect(decision.reason.toLowerCase()).toContain('destructive');
     });
 
     it('should allow benign action when capability is granted', async () => {
@@ -86,13 +85,13 @@ describe('Safety Package', () => {
   });
 
   describe('AuditLogger', () => {
-    it('should record audit records with timestamps', () => {
-      const clock = new SystemClock();
-      const logger = new AuditLogger(clock);
+    it('should record audit entries into hash chain', () => {
+      const logger = new AuditLogger();
 
-      const record = logger.record('info', 'policy:evaluate', 'user', { target: 'file.txt' });
-      expect(record.action).toBe('policy:evaluate');
-      expect(logger.getRecords()).toHaveLength(1);
+      const entry = logger.logPolicyDecision('fs:read', 'file.txt', 'allow', 'Test reason');
+      expect(entry.type).toBe('policy_decision');
+      expect(entry.index).toBe(0);
+      expect(logger.getEntries()).toHaveLength(1);
     });
   });
 });

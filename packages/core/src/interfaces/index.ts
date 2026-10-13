@@ -58,7 +58,8 @@ export interface PolicyDecision {
 
 export interface ToolActionIntent {
   readonly toolName: string;
-  readonly actionType: 'fs:read' | 'fs:write' | 'exec:command' | 'net:request' | 'state:modify';
+  readonly actionType:
+    'fs:read' | 'fs:write' | 'exec:command' | 'net:request' | 'state:modify' | 'mcp:call';
   readonly target: string;
   readonly parameters: Readonly<Record<string, unknown>>;
 }

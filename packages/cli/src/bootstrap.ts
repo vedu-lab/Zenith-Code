@@ -1,3 +1,4 @@
+import path from 'node:path';
 import {
   SystemClock,
   CoreEventBus,
@@ -8,7 +9,6 @@ import {
   IClock,
   IEventBus,
   PolicyGate,
-  AllowAllPolicyGate,
   FileReadTracker,
   ReadFileTool,
   WriteFileTool,
@@ -25,7 +25,15 @@ import {
   SystemPromptBuilder,
   HeadlessRunner,
 } from '@forge/core';
-import { CapabilityManager, PolicyEngine, AuditLogger } from '@forge/safety';
+import {
+  CapabilityManager,
+  PolicyEngine,
+  PolicyMode,
+  AuditLogger,
+  SandboxManager,
+  SecretRedactor,
+  OfflineGuard,
+} from '@forge/safety';
 import { SessionManager, CheckpointStore, UsageLedger, SqliteStore } from '@forge/state';
 import { NodeFileSystem } from './io/filesystem.js';
 import { ExecaProcessRunner } from './io/process-runner.js';
@@ -38,6 +46,9 @@ export interface ForgeAppContainer {
   readonly capabilities: CapabilityManager;
   readonly policyEngine: PolicyEngine;
   readonly auditLogger: AuditLogger;
+  readonly sandboxManager: SandboxManager;
+  readonly secretRedactor: SecretRedactor;
+  readonly offlineGuard: OfflineGuard;
   readonly sessionManager: SessionManager;
   readonly checkpointStore: CheckpointStore;
   readonly usageLedger: UsageLedger;
@@ -60,6 +71,9 @@ export interface BootstrapOptions {
   readonly processRunner?: IProcessRunner | undefined;
   readonly sqlitePath?: string | undefined;
   readonly policyGate?: PolicyGate | undefined;
+  readonly policyMode?: PolicyMode | undefined;
+  readonly offline?: boolean | undefined;
+  readonly auditFilePath?: string | undefined;
   readonly projectRoot?: string | undefined;
 }
 
@@ -71,10 +85,28 @@ export async function bootstrapApp(options: BootstrapOptions = {}): Promise<Forg
 
   const eventBus = new CoreEventBus();
   const capabilities = new CapabilityManager();
-  const policyEngine = new PolicyEngine(capabilities);
-  const auditLogger = new AuditLogger(clock, eventBus);
+  const secretRedactor = new SecretRedactor();
+  const offlineGuard = new OfflineGuard(options.offline ?? false);
 
-  const policyGate = options.policyGate ?? new AllowAllPolicyGate();
+  const policyEngine = new PolicyEngine(capabilities, {
+    workspaceRoot: projectRoot,
+    mode: options.policyMode ?? 'default',
+    eventBus,
+  });
+
+  const sandboxManager = new SandboxManager({
+    workspaceRoot: projectRoot,
+  });
+
+  const auditPath = options.auditFilePath ?? path.join(projectRoot, '.forge', 'audit.jsonl');
+  const auditLogger = new AuditLogger({
+    filePath: auditPath,
+    eventBus,
+    secretRedactor,
+  });
+
+  // Tools are gated by the real PolicyEngine
+  const policyGate = options.policyGate ?? policyEngine;
 
   // Load layered config
   const config = await loadConfig({
@@ -120,6 +152,9 @@ export async function bootstrapApp(options: BootstrapOptions = {}): Promise<Forg
     capabilities,
     policyEngine,
     auditLogger,
+    sandboxManager,
+    secretRedactor,
+    offlineGuard,
     sessionManager,
     checkpointStore,
     usageLedger,
