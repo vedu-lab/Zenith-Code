@@ -1,64 +1,220 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Text } from 'ink';
-import { IEventBus, ForgeEvent } from '@forge/core';
+import React, { useState } from 'react';
+import { Box } from 'ink';
+import { IEventBus } from '@forge/core';
+import { PolicyMode } from '@forge/safety';
+import { Checkpoint, MemoryEntry } from '@forge/state';
+import {
+  TuiViewMode,
+  PermissionRequest,
+  CapabilityPromptRequest,
+  PlanPreviewData,
+  SlashCommandContext,
+} from './types.js';
+import { useAgentEvents } from './hooks/useAgentEvents.js';
 import { Header } from './components/Header.js';
-import { StatusBadge } from './components/StatusBadge.js';
+import { Footer } from './components/Footer.js';
+import { MessageList } from './components/MessageList.js';
+import { SpinnerTodoPanel } from './components/SpinnerTodoPanel.js';
+import { InputBox } from './components/InputBox.js';
+import { PermissionPrompt } from './components/PermissionPrompt.js';
+import { CapabilityRequestPrompt } from './components/CapabilityRequestPrompt.js';
+import { PlanPreview } from './components/PlanPreview.js';
+import { RewindPicker } from './components/RewindPicker.js';
+import { MemoryBrowser } from './components/MemoryBrowser.js';
+import { findSlashCommand } from './commands/slash-commands.js';
 
 export interface AppProps {
-  readonly version: string;
+  readonly version?: string | undefined;
   readonly model: string;
+  readonly cwd?: string | undefined;
+  readonly initialMode?: PolicyMode | undefined;
+  readonly sessionTitle?: string | undefined;
   readonly eventBus: IEventBus;
+  readonly onUserSubmit?: ((prompt: string) => Promise<void> | void) | undefined;
+  readonly onInterrupt?: (() => void) | undefined;
+  readonly onExit?: (() => void) | undefined;
+  readonly checkpoints?: readonly Checkpoint[] | undefined;
+  readonly memories?: readonly MemoryEntry[] | undefined;
+  readonly onRewind?:
+    ((checkpointId: string, scope: 'code' | 'conversation' | 'both') => void) | undefined;
+  readonly onBranch?: ((checkpointId: string, branchName: string) => void) | undefined;
+  readonly onDeleteMemory?: ((id: string) => void) | undefined;
+  readonly onTogglePinMemory?: ((id: string) => void) | undefined;
+  readonly fileCandidates?: readonly string[] | undefined;
 }
 
-export const App: React.FC<AppProps> = ({ version, model, eventBus }) => {
-  const [events, setEvents] = useState<readonly ForgeEvent[]>([]);
-  const [currentStatus, setCurrentStatus] = useState<
-    'idle' | 'running' | 'waiting_approval' | 'error'
-  >('idle');
+export const App: React.FC<AppProps> = ({
+  version = '0.1.0',
+  model,
+  cwd = process.cwd(),
+  initialMode = 'default',
+  sessionTitle,
+  eventBus,
+  onUserSubmit,
+  onInterrupt,
+  onExit,
+  checkpoints = [],
+  memories = [],
+  onRewind,
+  onBranch,
+  onDeleteMemory,
+  onTogglePinMemory,
+  fileCandidates = [],
+}) => {
+  const [viewMode, setViewMode] = useState<TuiViewMode>('chat');
+  const [mode, setMode] = useState<PolicyMode>(initialMode);
+  const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
+  const [pendingCapability, setPendingCapability] = useState<CapabilityPromptRequest | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<PlanPreviewData | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = eventBus.subscribeAll((event) => {
-      setEvents((prev) => [...prev.slice(-9), event]);
+  const {
+    messages,
+    streamingText,
+    toolCalls,
+    todos,
+    status,
+    liveCost,
+    contextUsagePercent,
+    activeCapabilitiesCount,
+    addMessage,
+    clearMessages,
+  } = useAgentEvents({
+    eventBus,
+    onPermissionRequested: (req) => {
+      setPendingPermission(req);
+      setViewMode('permission');
+    },
+    onCapabilityRequested: (req) => {
+      setPendingCapability(req);
+      setViewMode('capability');
+    },
+  });
 
-      if (event.type === 'turn.started') {
-        setCurrentStatus('running');
-      } else if (event.type === 'tool.requested') {
-        setCurrentStatus('waiting_approval');
-      } else if (event.type === 'tool.executed') {
-        setCurrentStatus('running');
-      } else if (event.type === 'session:closed' || event.type === 'turn.completed') {
-        setCurrentStatus('idle');
-      }
+  const handleInputSubmit = (input: string): void => {
+    const slash = findSlashCommand(input);
+    if (slash) {
+      const slashCtx: SlashCommandContext = {
+        setViewMode,
+        addMessage,
+        clearMessages,
+        currentModel: model,
+        cwd,
+        mode,
+        setMode,
+        interruptRunning: onInterrupt,
+        onExit,
+      };
+      void slash.cmd.handler(slash.args, slashCtx);
+      return;
+    }
+
+    addMessage({
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: input,
+      timestamp: Date.now(),
     });
 
-    return () => {
-      unsubscribe();
-    };
-  }, [eventBus]);
+    if (onUserSubmit) {
+      void onUserSubmit(input);
+    }
+  };
+
+  const handleInterrupt = (): void => {
+    if (onInterrupt) {
+      onInterrupt();
+    }
+  };
+
+  const handleOpenRewindPicker = (): void => {
+    setViewMode('rewind_picker');
+  };
 
   return (
-    <Box flexDirection="column" padding={1}>
-      <Header version={version} model={model} />
-      <Box marginY={1}>
-        <StatusBadge status={currentStatus} />
-      </Box>
+    <Box flexDirection="column" padding={1} width="100%">
+      <Header version={version} model={model} cwd={cwd} mode={mode} sessionTitle={sessionTitle} />
 
-      <Box flexDirection="column" borderStyle="single" paddingX={1}>
-        <Text bold underline>
-          Activity Stream:
-        </Text>
-        {events.length === 0 ? (
-          <Text dimColor>No events yet. Ready for instructions.</Text>
-        ) : (
-          events.map((evt) => (
-            <Box key={evt.id}>
-              <Text dimColor>[{new Date(evt.timestamp).toLocaleTimeString()}] </Text>
-              <Text color="cyan">{evt.type}</Text>
-              <Text> (by {evt.actor})</Text>
-            </Box>
-          ))
-        )}
-      </Box>
+      {/* Main View Area */}
+      {viewMode === 'permission' && pendingPermission ? (
+        <PermissionPrompt
+          toolName={pendingPermission.toolName}
+          command={pendingPermission.command}
+          filePath={pendingPermission.filePath}
+          diff={pendingPermission.diff}
+          parameters={pendingPermission.parameters}
+          onDecide={(decision, feedback) => {
+            pendingPermission.onDecide(decision, feedback);
+            setPendingPermission(null);
+            setViewMode('chat');
+          }}
+        />
+      ) : viewMode === 'capability' && pendingCapability ? (
+        <CapabilityRequestPrompt
+          resourcePattern={pendingCapability.resourcePattern}
+          action={pendingCapability.action}
+          durationMs={pendingCapability.durationMs}
+          scope={pendingCapability.scope}
+          onDecide={(decision) => {
+            pendingCapability.onDecide(decision);
+            setPendingCapability(null);
+            setViewMode('chat');
+          }}
+        />
+      ) : viewMode === 'plan_preview' && pendingPlan ? (
+        <PlanPreview
+          plan={pendingPlan}
+          onApprove={() => {
+            setPendingPlan(null);
+            setViewMode('chat');
+          }}
+          onCancel={() => {
+            setPendingPlan(null);
+            setViewMode('chat');
+          }}
+        />
+      ) : viewMode === 'rewind_picker' || viewMode === 'checkpoints_tree' ? (
+        <RewindPicker
+          checkpoints={checkpoints}
+          onRewind={(cpId, scope) => {
+            if (onRewind) onRewind(cpId, scope);
+            setViewMode('chat');
+          }}
+          onBranch={(cpId, branch) => {
+            if (onBranch) onBranch(cpId, branch);
+          }}
+          onClose={() => setViewMode('chat')}
+        />
+      ) : viewMode === 'memory_browser' ? (
+        <MemoryBrowser
+          memories={memories}
+          onDelete={onDeleteMemory}
+          onTogglePin={onTogglePinMemory}
+          onClose={() => setViewMode('chat')}
+        />
+      ) : (
+        <Box flexDirection="column">
+          <MessageList messages={messages} streamingText={streamingText} toolCalls={toolCalls} />
+          <SpinnerTodoPanel
+            isRunning={status === 'running'}
+            tokenCount={toolCalls.length * 100}
+            todos={todos}
+          />
+          <InputBox
+            onSubmit={handleInputSubmit}
+            onInterrupt={handleInterrupt}
+            onOpenRewindPicker={handleOpenRewindPicker}
+            fileCandidates={fileCandidates}
+            disabled={status === 'running'}
+          />
+        </Box>
+      )}
+
+      <Footer
+        mode={mode}
+        liveCost={liveCost}
+        contextUsagePercent={contextUsagePercent}
+        activeCapabilitiesCount={activeCapabilitiesCount}
+      />
     </Box>
   );
 };

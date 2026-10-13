@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@forge/core": "workspace:*",
+    "@forge/safety": "workspace:*",
     "@forge/state": "workspace:*",
     "zod": "^3.24.2"
   }
