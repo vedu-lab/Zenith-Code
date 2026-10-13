@@ -193,6 +193,86 @@ export interface AuditLogEvent extends BaseEvent {
   };
 }
 
+// Trust, Verification, Planning, Escalation & Handoff Events
+export interface VerificationStartedEvent extends BaseEvent {
+  readonly type: 'verification.started';
+  readonly payload: {
+    readonly attempt: number;
+    readonly maxAttempts: number;
+    readonly stage: string;
+    readonly changedFiles: readonly string[];
+  };
+}
+
+export interface VerificationCompletedEvent extends BaseEvent {
+  readonly type: 'verification.completed';
+  readonly payload: {
+    readonly attempt: number;
+    readonly success: boolean;
+    readonly stage: string;
+    readonly evidence?: Readonly<Record<string, unknown>> | undefined;
+    readonly error?: string | undefined;
+  };
+}
+
+export interface FakeVerificationEvent extends BaseEvent {
+  readonly type: 'verification.fake_detected';
+  readonly payload: {
+    readonly reason:
+      | 'no_tests_run'
+      | 'tests_weakened_or_skipped'
+      | 'zero_tests_collected'
+      | 'source_and_tests_edited_together';
+    readonly details: string;
+  };
+}
+
+export interface PlanCreatedEvent extends BaseEvent {
+  readonly type: 'plan.created';
+  readonly payload: {
+    readonly planId: string;
+    readonly steps: readonly string[];
+    readonly files: readonly string[];
+    readonly commands: readonly string[];
+    readonly estimatedCostUsd: number;
+    readonly estimatedDurationSeconds: number;
+  };
+}
+
+export interface PlanDriftDetectedEvent extends BaseEvent {
+  readonly type: 'plan.drift_detected';
+  readonly payload: {
+    readonly driftType: 'unplanned_files' | 'unplanned_dependencies' | 'cost_spike' | 'turns_spike';
+    readonly details: string;
+    readonly unplannedItems: readonly string[];
+  };
+}
+
+export interface ModelEscalatedEvent extends BaseEvent {
+  readonly type: 'model.escalated';
+  readonly payload: {
+    readonly fromModel: string;
+    readonly toModel: string;
+    readonly reason: string;
+    readonly thresholdDetails?: Readonly<Record<string, unknown>> | undefined;
+  };
+}
+
+export interface HandoffCreatedEvent extends BaseEvent {
+  readonly type: 'handoff.created';
+  readonly payload: {
+    readonly handoffId: string;
+    readonly reason:
+      | 'verification_failed'
+      | 'budget_exhausted'
+      | 'policy_denial'
+      | 'loop_detected'
+      | 'user_requested';
+    readonly briefSummary: string;
+    readonly checkpointId?: string | undefined;
+  };
+}
+
 export type ForgeEvent =
   | TurnStartedEvent
   | TurnCompletedEvent
@@ -212,6 +292,13 @@ export type ForgeEvent =
   | ToolApprovedEvent
   | ToolRejectedEvent
   | AgentStepEvent
-  | AuditLogEvent;
+  | AuditLogEvent
+  | VerificationStartedEvent
+  | VerificationCompletedEvent
+  | FakeVerificationEvent
+  | PlanCreatedEvent
+  | PlanDriftDetectedEvent
+  | ModelEscalatedEvent
+  | HandoffCreatedEvent;
 
 export type EventType = ForgeEvent['type'];

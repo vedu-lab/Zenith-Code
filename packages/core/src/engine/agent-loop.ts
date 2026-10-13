@@ -4,6 +4,20 @@ import { ToolRegistry } from '../tools/registry.js';
 import { IEventBus } from '../events/index.js';
 import { IClock } from '../interfaces/index.js';
 import { ForgeError, ErrorCode } from '../errors/index.js';
+import {
+  DoneGate,
+  EvidenceCollector,
+  TaskPlanner,
+  TrustPlan,
+  PlanDriftDetector,
+  EscalationEngine,
+  ComplexityClassifier,
+  HumanHandoffManager,
+  HandoffBrief,
+  VerificationResult,
+  AttemptLog,
+} from '../trust/index.js';
+import { FileChangeRecord, TestExecutionRecord } from '../trust/fake-detection.js';
 
 export interface AgentLoopOptions {
   readonly sessionId: string;
@@ -13,6 +27,17 @@ export interface AgentLoopOptions {
   readonly abortSignal?: AbortSignal | undefined;
   readonly temperature?: number | undefined;
   readonly enablePromptCaching?: boolean | undefined;
+
+  // Trust and verification configurations
+  readonly doneGate?: DoneGate | undefined;
+  readonly planner?: TaskPlanner | undefined;
+  readonly initialPlan?: TrustPlan | undefined;
+  readonly driftDetector?: PlanDriftDetector | undefined;
+  readonly escalator?: EscalationEngine | undefined;
+  readonly handoffManager?: HumanHandoffManager | undefined;
+  readonly fastModel?: string | undefined;
+  readonly mainModel?: string | undefined;
+  readonly evidenceCollector?: EvidenceCollector | undefined;
 }
 
 export interface AgentLoopRunResult {
@@ -23,6 +48,11 @@ export interface AgentLoopRunResult {
   readonly messages: readonly Message[];
   readonly totalTokens: number;
   readonly estimatedCostUsd: number;
+  readonly activeModel: string;
+  readonly handoffBrief?: HandoffBrief | undefined;
+  readonly verificationResult?: VerificationResult | undefined;
+  readonly trustReport?: string | undefined;
+  readonly plan?: TrustPlan | undefined;
 }
 
 export class AgentLoop {
@@ -35,8 +65,44 @@ export class AgentLoop {
 
   async run(initialUserMessage: string, options: AgentLoopOptions): Promise<AgentLoopRunResult> {
     const maxTurns = options.maxTurns ?? 30;
-    const model = options.model ?? 'default';
-    const caps = globalCapabilityRegistry.get(model);
+
+    // Fast Mode / Complexity routing
+    const fastModel = options.fastModel ?? 'fast';
+    const mainModel = options.mainModel ?? options.model ?? 'default';
+
+    let currentModelRole: 'fast' | 'main' = 'main';
+    let currentModel = mainModel;
+
+    if (!options.model) {
+      const classification = ComplexityClassifier.classify(initialUserMessage);
+      currentModelRole = classification.modelRole;
+      currentModel = currentModelRole === 'fast' ? fastModel : mainModel;
+    } else {
+      currentModel = options.model;
+    }
+
+    let caps = globalCapabilityRegistry.get(currentModel);
+
+    // Trust tracking structures
+    const changedFiles: FileChangeRecord[] = [];
+    const testHistory: TestExecutionRecord[] = [];
+    const touchedPaths = new Set<string>();
+    const attemptLogs: AttemptLog[] = [];
+    let toolValidationErrorsCount = 0;
+    let failedVerificationCount = 0;
+    let activePlan: TrustPlan | undefined = options.initialPlan;
+
+    // Plan-first for non-trivial tasks if planner is injected and no initial plan was given
+    if (options.planner && !activePlan) {
+      const classification = ComplexityClassifier.classify(initialUserMessage);
+      if (classification.level !== 'simple') {
+        activePlan = options.planner.createPlan({
+          steps: ['Analyze problem', 'Implement surgical modifications', 'Run verification'],
+          files: [],
+          verificationMethod: 'Multi-stage DoneGate loop',
+        });
+      }
+    }
 
     const messages: Message[] = [];
     if (options.systemPrompt) {
@@ -50,6 +116,8 @@ export class AgentLoop {
     let totalCacheReadTokens = 0;
     let totalCacheWriteTokens = 0;
     let finalStopReason = 'end_turn';
+    let lastHandoffBrief: HandoffBrief | undefined;
+    let lastVerificationResult: VerificationResult | undefined;
 
     while (turnIndex < maxTurns) {
       if (options.abortSignal?.aborted) {
@@ -68,7 +136,7 @@ export class AgentLoop {
         payload: {
           turnIndex,
           sessionId: options.sessionId,
-          model,
+          model: currentModel,
         },
       });
 
@@ -80,7 +148,7 @@ export class AgentLoop {
       // Stream from LLM provider
       try {
         const stream = this.provider.stream(messages, toolDefs, {
-          model,
+          model: currentModel,
           temperature: options.temperature,
           abortSignal: options.abortSignal,
           enablePromptCaching: options.enablePromptCaching ?? caps.supportsPromptCaching,
@@ -127,7 +195,7 @@ export class AgentLoop {
               actor: 'system',
               payload: {
                 sessionId: options.sessionId,
-                model,
+                model: currentModel,
                 inputTokens: event.inputTokens,
                 outputTokens: event.outputTokens,
                 totalTokens: event.inputTokens + event.outputTokens,
@@ -162,9 +230,94 @@ export class AgentLoop {
         toolCalls: collectedToolCalls.length > 0 ? collectedToolCalls : undefined,
       });
 
-      // If no tool calls, model finished its task
+      // DONE GATE CHECK: If no tool calls, the model is attempting to finish!
       if (collectedToolCalls.length === 0) {
         finalStopReason = turnStopReason;
+
+        // If DoneGate is active, verification loop executes
+        if (options.doneGate) {
+          const verifResult = await options.doneGate.verify(changedFiles, testHistory);
+          lastVerificationResult = verifResult;
+
+          if (!verifResult.passed) {
+            failedVerificationCount++;
+            attemptLogs.push({
+              attemptNumber: verifResult.attempt,
+              action: `Verification attempt ${verifResult.attempt} for ${changedFiles.length} modified files`,
+              failureReason: verifResult.error ?? 'Verification failed',
+            });
+
+            // Check if escalation to main model is needed
+            if (options.escalator && currentModelRole === 'fast') {
+              const esc = options.escalator.evaluateEscalation({
+                currentModelRole,
+                currentModelName: currentModel,
+                mainModelName: mainModel,
+                failedVerificationAttempts: failedVerificationCount,
+                touchedFilesCount: touchedPaths.size,
+                toolValidationErrorsCount,
+                currentContextTokens: totalPromptTokens + totalCompletionTokens,
+              });
+
+              if (esc.shouldEscalate) {
+                currentModelRole = 'main';
+                currentModel = mainModel;
+                caps = globalCapabilityRegistry.get(currentModel);
+              }
+            }
+
+            // If verification attempts are exhausted, escalate to Human Handoff!
+            if (options.doneGate.isAttemptsExhausted()) {
+              finalStopReason = 'verification_failed';
+
+              if (options.handoffManager) {
+                lastHandoffBrief = options.handoffManager.createHandoffBrief({
+                  goal: initialUserMessage,
+                  reason: 'verification_failed',
+                  currentDiffSummary: changedFiles
+                    .map((c) => `--- ${c.path}\n+++ ${c.path}`)
+                    .join('\n'),
+                  attempts: attemptLogs,
+                  leadingHypothesis: verifResult.error ?? 'Unknown failure condition',
+                  hypothesisEvidence: verifResult.remediation ?? 'Verification attempts exhausted',
+                  unverifiedItems: changedFiles.map((c) => c.path),
+                  reproCommands: Array.from(
+                    new Set([
+                      ...testHistory.map((t) => t.command),
+                      ...(options.doneGate ? options.doneGate.getVerificationCommands() : []),
+                    ]),
+                  ),
+                });
+              }
+
+              const turnDurationMs = this.clock.nowMs() - turnStartMs;
+              await this.eventBus.publish({
+                id: `turn-comp-${turnIndex}-${this.clock.nowMs()}`,
+                type: 'turn.completed',
+                timestamp: this.clock.nowMs(),
+                actor: 'agent',
+                payload: {
+                  turnIndex,
+                  sessionId: options.sessionId,
+                  stopReason: finalStopReason,
+                  durationMs: turnDurationMs,
+                },
+              });
+              break; // Stop loop and return unfixable handoff
+            }
+
+            // Retry loop: send verification failure details back to model
+            messages.push({
+              role: 'user',
+              content: `Verification Failed (Attempt ${verifResult.attempt}):\n${verifResult.error}\n\nRemediation:\n${verifResult.remediation}\nPlease repair the issue, run required verification, and re-test.`,
+            });
+            continue; // Continue agent loop
+          } else {
+            // Verification passed cleanly!
+            finalStopReason = 'verified';
+          }
+        }
+
         const turnDurationMs = this.clock.nowMs() - turnStartMs;
         await this.eventBus.publish({
           id: `turn-comp-${turnIndex}-${this.clock.nowMs()}`,
@@ -181,7 +334,7 @@ export class AgentLoop {
         break;
       }
 
-      // Separate read-only tools (which can run in parallel) from mutating tools (which run sequentially)
+      // Separate read-only tools from mutating tools
       const readOnlyCalls: ToolCall[] = [];
       const mutatingCalls: ToolCall[] = [];
 
@@ -198,6 +351,7 @@ export class AgentLoop {
         readOnlyCalls.map(async (call) => {
           const tool = this.tools.get(call.name);
           if (!tool) {
+            toolValidationErrorsCount++;
             return {
               call,
               output: `Error: Tool '${call.name}' not found.`,
@@ -212,6 +366,7 @@ export class AgentLoop {
               isError: false,
             };
           } catch (err) {
+            toolValidationErrorsCount++;
             const msg = err instanceof Error ? err.message : String(err);
             return {
               call,
@@ -236,6 +391,7 @@ export class AgentLoop {
       for (const call of mutatingCalls) {
         const tool = this.tools.get(call.name);
         if (!tool) {
+          toolValidationErrorsCount++;
           messages.push({
             role: 'tool',
             content: `Error: Tool '${call.name}' not found.`,
@@ -248,16 +404,83 @@ export class AgentLoop {
 
         try {
           const result = await tool.execute(call.arguments);
+          const outputStr = typeof result === 'string' ? result : JSON.stringify(result);
+
+          // Track modified files
+          if (
+            call.name === 'write_file' ||
+            call.name === 'edit_file' ||
+            call.name === 'multi_edit'
+          ) {
+            const p = String(call.arguments['filePath'] ?? '');
+            if (p) {
+              touchedPaths.add(p);
+              changedFiles.push({
+                path: p,
+                beforeContent: '',
+                afterContent: outputStr,
+              });
+            }
+          }
+
+          // Track test executions via bash tool
+          if (call.name === 'bash') {
+            const cmd = String(call.arguments['command'] ?? '');
+            if (
+              cmd.includes('test') ||
+              cmd.includes('vitest') ||
+              cmd.includes('jest') ||
+              cmd.includes('pytest')
+            ) {
+              testHistory.push({
+                command: cmd,
+                exitCode: 0,
+                output: outputStr,
+              });
+            }
+          }
+
+          // Check plan drift
+          if (options.driftDetector && activePlan) {
+            const currentCostUsd =
+              (totalPromptTokens / 1_000_000) * caps.pricing.inputPerMillion +
+              (totalCompletionTokens / 1_000_000) * caps.pricing.outputPerMillion;
+            options.driftDetector.checkDrift(
+              activePlan,
+              Array.from(touchedPaths),
+              currentCostUsd,
+              turnIndex,
+            );
+          }
+
           messages.push({
             role: 'tool',
-            content: typeof result === 'string' ? result : JSON.stringify(result),
+            content: outputStr,
             toolCallId: call.id,
             name: call.name,
             isError: false,
           });
         } catch (err) {
+          toolValidationErrorsCount++;
           const msg = err instanceof Error ? err.message : String(err);
-          // Tool execution errors go back to the model so it can repair/self-correct; NEVER crash loop!
+
+          // Track failed test commands
+          if (call.name === 'bash') {
+            const cmd = String(call.arguments['command'] ?? '');
+            if (
+              cmd.includes('test') ||
+              cmd.includes('vitest') ||
+              cmd.includes('jest') ||
+              cmd.includes('pytest')
+            ) {
+              testHistory.push({
+                command: cmd,
+                exitCode: 1,
+                output: msg,
+              });
+            }
+          }
+
           messages.push({
             role: 'tool',
             content: `Error executing tool '${call.name}': ${msg}`,
@@ -284,24 +507,34 @@ export class AgentLoop {
     }
 
     const isCompleted =
-      finalStopReason !== 'tool_use' &&
-      finalStopReason !== 'max_tokens' &&
-      finalStopReason !== 'cancelled';
+      finalStopReason === 'verified' || (finalStopReason === 'end_turn' && !options.doneGate);
+
     const totalTokens = totalPromptTokens + totalCompletionTokens;
     const estimatedCostUsd =
       (totalPromptTokens / 1_000_000) * caps.pricing.inputPerMillion +
       (totalCompletionTokens / 1_000_000) * caps.pricing.outputPerMillion +
-      (totalCacheReadTokens / 1_000_000) * (caps.pricing.cacheReadPerMillion ?? 0) +
-      (totalCacheWriteTokens / 1_000_000) * (caps.pricing.cacheWritePerMillion ?? 0);
+      ((totalCacheReadTokens ?? 0) / 1_000_000) * (caps.pricing.cacheReadPerMillion ?? 0) +
+      ((totalCacheWriteTokens ?? 0) / 1_000_000) * (caps.pricing.cacheWritePerMillion ?? 0);
+
+    const trustReport = options.evidenceCollector
+      ? options.evidenceCollector.formatTrustReport(
+          isCompleted ? '### Final Verification Report' : '### Incomplete / Handoff Report',
+        )
+      : undefined;
 
     return {
       sessionId: options.sessionId,
       totalTurns: turnIndex,
       completed: isCompleted,
-      stopReason: finalStopReason === 'tool_use' ? 'max_turns' : finalStopReason,
+      stopReason: finalStopReason,
       messages,
       totalTokens,
       estimatedCostUsd,
+      activeModel: currentModel,
+      handoffBrief: lastHandoffBrief,
+      verificationResult: lastVerificationResult,
+      trustReport,
+      plan: activePlan,
     };
   }
 }
