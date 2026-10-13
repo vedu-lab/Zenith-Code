@@ -21,6 +21,8 @@ import { CapabilityRequestPrompt } from './components/CapabilityRequestPrompt.js
 import { PlanPreview } from './components/PlanPreview.js';
 import { RewindPicker } from './components/RewindPicker.js';
 import { MemoryBrowser } from './components/MemoryBrowser.js';
+import { ParallelDashboard } from './components/ParallelDashboard.js';
+import { ReviewerReportView } from './components/ReviewerReportView.js';
 import { findSlashCommand } from './commands/slash-commands.js';
 
 export interface AppProps {
@@ -76,6 +78,7 @@ export const App: React.FC<AppProps> = ({
     liveCost,
     contextUsagePercent,
     activeCapabilitiesCount,
+    parallelData,
     addMessage,
     clearMessages,
   } = useAgentEvents({
@@ -190,6 +193,49 @@ export const App: React.FC<AppProps> = ({
           onDelete={onDeleteMemory}
           onTogglePin={onTogglePinMemory}
           onClose={() => setViewMode('chat')}
+        />
+      ) : viewMode === 'parallel_dashboard' ? (
+        <ParallelDashboard
+          data={
+            parallelData ?? {
+              runId: 'run-idle',
+              mode: 'compete',
+              costWarning:
+                'Warning: Running 2 parallel agents costs approximately 2x as much. Total cap: $1.00, concurrency cap: 2.',
+              totalCostUsd: 0,
+              totalCostCapUsd: 1.0,
+              maxConcurrency: 2,
+              agents: [],
+            }
+          }
+          onOpenReviewerReport={() => setViewMode('reviewer_report')}
+          onClose={() => setViewMode('chat')}
+        />
+      ) : viewMode === 'reviewer_report' ? (
+        <ReviewerReportView
+          summary={parallelData?.reviewerSummary ?? 'Reviewer evaluation completed.'}
+          winnerId={parallelData?.winnerId}
+          recommendedStrategy="pick"
+          diff={parallelData?.mergedDiff}
+          onApprove={() => {
+            addMessage({
+              id: `merge-${Date.now()}`,
+              role: 'system',
+              content: 'User approved final merge. Changes merged into working tree.',
+              timestamp: Date.now(),
+            });
+            setViewMode('chat');
+          }}
+          onReject={() => {
+            addMessage({
+              id: `reject-${Date.now()}`,
+              role: 'system',
+              content: 'User rejected final merge. Working tree remains clean.',
+              timestamp: Date.now(),
+            });
+            setViewMode('chat');
+          }}
+          onBack={() => setViewMode('parallel_dashboard')}
         />
       ) : (
         <Box flexDirection="column">

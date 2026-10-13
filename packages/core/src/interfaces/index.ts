@@ -26,6 +26,9 @@ export interface IFileSystem {
   readDir(dirPath: string): Promise<readonly string[]>;
   stat(filePath: string): Promise<FileStatResult>;
   preserveLineEndings(originalContent: string, newContent: string): string;
+  unlink?(filePath: string): Promise<void>;
+  rmdir?(dirPath: string, options?: { recursive?: boolean }): Promise<void>;
+  copyFile?(sourcePath: string, destinationPath: string): Promise<void>;
 }
 
 export interface ProcessRunOptions {

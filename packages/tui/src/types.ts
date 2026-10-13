@@ -7,7 +7,36 @@ export type TuiViewMode =
   | 'plan_preview'
   | 'rewind_picker'
   | 'memory_browser'
-  | 'checkpoints_tree';
+  | 'checkpoints_tree'
+  | 'parallel_dashboard'
+  | 'reviewer_report';
+
+export interface ParallelAgentDisplayState {
+  readonly agentId: string;
+  readonly name: string;
+  readonly model: string;
+  readonly strategy: string;
+  readonly status: 'pending' | 'running' | 'completed' | 'failed' | 'budget_exhausted' | 'crashed';
+  readonly costUsd: number;
+  readonly budgetUsd: number;
+  readonly elapsedMs: number;
+  readonly testStatus: string;
+  readonly touchedFilesCount: number;
+  readonly error?: string | undefined;
+}
+
+export interface ParallelDashboardData {
+  readonly runId: string;
+  readonly mode: 'compete' | 'collaborate';
+  readonly costWarning: string;
+  readonly totalCostUsd: number;
+  readonly totalCostCapUsd: number;
+  readonly maxConcurrency: number;
+  readonly agents: readonly ParallelAgentDisplayState[];
+  readonly reviewerSummary?: string | undefined;
+  readonly winnerId?: string | undefined;
+  readonly mergedDiff?: string | undefined;
+}
 
 export interface TuiMessage {
   readonly id: string;

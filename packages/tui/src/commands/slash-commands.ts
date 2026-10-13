@@ -202,6 +202,40 @@ export const slashCommands: readonly SlashCommandDefinition[] = [
     },
   },
   {
+    name: '/parallel',
+    description: 'Open the parallel multi-agent dashboard view (/parallel)',
+    handler: (_args, context) => {
+      context.setViewMode('parallel_dashboard');
+    },
+  },
+  {
+    name: '/compete',
+    description: 'Run parallel agents in competition mode on the same task (/compete [task])',
+    handler: (args, context) => {
+      context.addMessage({
+        id: `compete-${Date.now()}`,
+        role: 'system',
+        content: `Initiating COMPETE mode for task: "${args || 'current task'}". Warning: 2 agents cost approximately 2x as much. Opening parallel dashboard.`,
+        timestamp: Date.now(),
+      });
+      context.setViewMode('parallel_dashboard');
+    },
+  },
+  {
+    name: '/collaborate',
+    description:
+      'Run parallel agents collaborating with declared file ownership (/collaborate [task])',
+    handler: (args, context) => {
+      context.addMessage({
+        id: `collab-${Date.now()}`,
+        role: 'system',
+        content: `Initiating COLLABORATE mode with declared disjoint file ownership for task: "${args || 'current task'}". Opening parallel dashboard.`,
+        timestamp: Date.now(),
+      });
+      context.setViewMode('parallel_dashboard');
+    },
+  },
+  {
     name: '/exit',
     description: 'Exit Forge and close the terminal UI',
     handler: (_args, context) => {

@@ -6,6 +6,8 @@ import {
   TuiTodo,
   PermissionRequest,
   CapabilityPromptRequest,
+  ParallelDashboardData,
+  ParallelAgentDisplayState,
 } from '../types.js';
 
 export interface UseAgentEventsProps {
@@ -25,11 +27,13 @@ export interface AgentEventsState {
   readonly contextUsagePercent: number;
   readonly activeCapabilitiesCount: number;
   readonly currentTurnIndex: number;
+  readonly parallelData: ParallelDashboardData | null;
   readonly addMessage: (message: TuiMessage) => void;
   readonly clearMessages: () => void;
   readonly setTodos: (todos: readonly TuiTodo[]) => void;
   readonly setStatus: (status: 'idle' | 'running' | 'waiting_approval' | 'error') => void;
   readonly setActiveCapabilitiesCount: (count: number) => void;
+  readonly setParallelData: (data: ParallelDashboardData | null) => void;
 }
 
 export function useAgentEvents({
@@ -47,6 +51,7 @@ export function useAgentEvents({
   const [contextUsagePercent, setContextUsagePercent] = useState<number>(0);
   const [activeCapabilitiesCount, setActiveCapabilitiesCount] = useState<number>(0);
   const [currentTurnIndex, setCurrentTurnIndex] = useState<number>(0);
+  const [parallelData, setParallelData] = useState<ParallelDashboardData | null>(null);
 
   const streamingRef = useRef<string>('');
   streamingRef.current = streamingText;
@@ -177,6 +182,103 @@ export function useAgentEvents({
           setStatus('idle');
           break;
         }
+
+        case 'parallel.started': {
+          setParallelData({
+            runId: event.payload.runId,
+            mode: event.payload.mode,
+            costWarning: event.payload.costWarning,
+            totalCostUsd: 0,
+            totalCostCapUsd: event.payload.totalCostCapUsd,
+            maxConcurrency: event.payload.maxConcurrency,
+            agents: [],
+          });
+          break;
+        }
+
+        case 'parallel.agent_started': {
+          const { agentId, name, model, strategy, budgetUsd } = event.payload;
+          setParallelData((prev) => {
+            if (!prev) return null;
+            const updatedAgents = [
+              ...prev.agents.filter((a) => a.agentId !== agentId),
+              {
+                agentId,
+                name,
+                model,
+                strategy,
+                status: 'running' as const,
+                costUsd: 0,
+                budgetUsd,
+                elapsedMs: 0,
+                testStatus: 'pending',
+                touchedFilesCount: 0,
+              },
+            ];
+            return { ...prev, agents: updatedAgents };
+          });
+          break;
+        }
+
+        case 'parallel.agent_progress': {
+          const { agentId, costUsd, status: agentStatus, elapsedMs, testStatus } = event.payload;
+          setParallelData((prev) => {
+            if (!prev) return null;
+            const updatedAgents = prev.agents.map((a) =>
+              a.agentId === agentId
+                ? {
+                    ...a,
+                    costUsd,
+                    status: (agentStatus as ParallelAgentDisplayState['status']) || a.status,
+                    elapsedMs,
+                    testStatus,
+                  }
+                : a,
+            );
+            const total = updatedAgents.reduce((sum, a) => sum + a.costUsd, 0);
+            return { ...prev, totalCostUsd: total, agents: updatedAgents };
+          });
+          break;
+        }
+
+        case 'parallel.agent_completed': {
+          const { agentId, status: compStatus, costUsd, testStatus, touchedFiles } = event.payload;
+          setParallelData((prev) => {
+            if (!prev) return null;
+            const updatedAgents = prev.agents.map((a) =>
+              a.agentId === agentId
+                ? {
+                    ...a,
+                    status: compStatus,
+                    costUsd,
+                    testStatus,
+                    touchedFilesCount: touchedFiles.length,
+                  }
+                : a,
+            );
+            const total = updatedAgents.reduce((sum, a) => sum + a.costUsd, 0);
+            return { ...prev, totalCostUsd: total, agents: updatedAgents };
+          });
+          break;
+        }
+
+        case 'parallel.review_completed': {
+          const { winnerId, rankingsSummary } = event.payload;
+          setParallelData((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              winnerId,
+              reviewerSummary: rankingsSummary,
+            };
+          });
+          break;
+        }
+
+        case 'parallel.reconciliation_completed': {
+          // Keep parallelData updated
+          break;
+        }
       }
     });
 
@@ -206,10 +308,12 @@ export function useAgentEvents({
     contextUsagePercent,
     activeCapabilitiesCount,
     currentTurnIndex,
+    parallelData,
     addMessage,
     clearMessages,
     setTodos,
     setStatus,
     setActiveCapabilitiesCount,
+    setParallelData,
   };
 }

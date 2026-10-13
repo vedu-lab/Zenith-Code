@@ -87,10 +87,10 @@ describe('Diff Snapshot Tests', () => {
       │ Diff: src/billing.ts                                                                             │
       │                                                                                                  │
       │ @@ -5,3 +5,3 @@                                                                                  │
-      │    5    5   function calculateTotal() {                                                          │
+      │    5    5  function calculateTotal() {                                                           │
       │    6      -   return 100;                                                                        │
       │         6 +   return 150;                                                                        │
-      │    7    7   }                                                                                    │
+      │    7    7  }                                                                                     │
       └──────────────────────────────────────────────────────────────────────────────────────────────────┘
       "
     `);

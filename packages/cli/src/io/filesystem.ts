@@ -49,4 +49,21 @@ export class NodeFileSystem implements IFileSystem {
     const normalizedNew = newContent.replace(/\r\n/g, '\n');
     return isCrlf ? normalizedNew.replace(/\n/g, '\r\n') : normalizedNew;
   }
+
+  async unlink(filePath: string): Promise<void> {
+    const resolved = path.resolve(filePath);
+    await fs.unlink(resolved);
+  }
+
+  async rmdir(dirPath: string, options?: { recursive?: boolean }): Promise<void> {
+    const resolved = path.resolve(dirPath);
+    await fs.rm(resolved, { recursive: options?.recursive ?? true, force: true });
+  }
+
+  async copyFile(sourcePath: string, destinationPath: string): Promise<void> {
+    const srcResolved = path.resolve(sourcePath);
+    const dstResolved = path.resolve(destinationPath);
+    await fs.mkdir(path.dirname(dstResolved), { recursive: true });
+    await fs.copyFile(srcResolved, dstResolved);
+  }
 }

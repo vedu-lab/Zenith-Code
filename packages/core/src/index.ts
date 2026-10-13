@@ -8,3 +8,4 @@ export * from './prompt/index.js';
 export * from './engine/index.js';
 export * from './headless/index.js';
 export * from './trust/index.js';
+export * from './parallel/index.js';

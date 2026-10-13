@@ -16,4 +16,6 @@ export * from './components/InputBox.js';
 export * from './components/PlanPreview.js';
 export * from './components/RewindPicker.js';
 export * from './components/MemoryBrowser.js';
+export * from './components/ParallelDashboard.js';
+export * from './components/ReviewerReportView.js';
 export * from './App.js';

@@ -1,4 +1,4 @@
-export type EventActor = 'agent' | 'user' | 'system' | 'tool';
+export type EventActor = 'agent' | 'user' | 'system' | 'tool' | 'orchestrator';
 
 export interface BaseEvent {
   readonly id: string;
@@ -273,6 +273,108 @@ export interface HandoffCreatedEvent extends BaseEvent {
   };
 }
 
+export interface ParallelStartedEvent extends BaseEvent {
+  readonly type: 'parallel.started';
+  readonly payload: {
+    readonly runId: string;
+    readonly mode: 'compete' | 'collaborate';
+    readonly agentCount: number;
+    readonly maxConcurrency: number;
+    readonly totalCostCapUsd: number;
+    readonly costWarning: string;
+  };
+}
+
+export interface ParallelAgentStartedEvent extends BaseEvent {
+  readonly type: 'parallel.agent_started';
+  readonly payload: {
+    readonly runId: string;
+    readonly agentId: string;
+    readonly name: string;
+    readonly model: string;
+    readonly strategy: string;
+    readonly worktreePath: string;
+    readonly budgetUsd: number;
+    readonly declaredOwnership?: readonly string[] | undefined;
+  };
+}
+
+export interface ParallelAgentProgressEvent extends BaseEvent {
+  readonly type: 'parallel.agent_progress';
+  readonly payload: {
+    readonly runId: string;
+    readonly agentId: string;
+    readonly turnIndex: number;
+    readonly costUsd: number;
+    readonly status: string;
+    readonly elapsedMs: number;
+    readonly testStatus: string;
+  };
+}
+
+export interface ParallelAgentCompletedEvent extends BaseEvent {
+  readonly type: 'parallel.agent_completed';
+  readonly payload: {
+    readonly runId: string;
+    readonly agentId: string;
+    readonly status: 'completed' | 'failed' | 'budget_exhausted' | 'crashed';
+    readonly costUsd: number;
+    readonly turns: number;
+    readonly durationMs: number;
+    readonly testStatus: string;
+    readonly touchedFiles: readonly string[];
+    readonly error?: string | undefined;
+  };
+}
+
+export interface ParallelReviewStartedEvent extends BaseEvent {
+  readonly type: 'parallel.review_started';
+  readonly payload: {
+    readonly runId: string;
+    readonly candidateIds: readonly string[];
+    readonly mode: string;
+  };
+}
+
+export interface ParallelReviewCompletedEvent extends BaseEvent {
+  readonly type: 'parallel.review_completed';
+  readonly payload: {
+    readonly runId: string;
+    readonly winnerId?: string | undefined;
+    readonly recommendedReconciliation: string;
+    readonly rankingsSummary: string;
+  };
+}
+
+export interface ParallelReconciliationStartedEvent extends BaseEvent {
+  readonly type: 'parallel.reconciliation_started';
+  readonly payload: {
+    readonly runId: string;
+    readonly strategy: string;
+    readonly candidateIds: readonly string[];
+  };
+}
+
+export interface ParallelReconciliationCompletedEvent extends BaseEvent {
+  readonly type: 'parallel.reconciliation_completed';
+  readonly payload: {
+    readonly runId: string;
+    readonly success: boolean;
+    readonly reVerificationPassed: boolean;
+    readonly conflictCount: number;
+    readonly approved: boolean;
+  };
+}
+
+export interface ParallelWorktreeCleanedEvent extends BaseEvent {
+  readonly type: 'parallel.worktree_cleaned';
+  readonly payload: {
+    readonly runId: string;
+    readonly agentId: string;
+    readonly worktreePath: string;
+  };
+}
+
 export type ForgeEvent =
   | TurnStartedEvent
   | TurnCompletedEvent
@@ -299,6 +401,15 @@ export type ForgeEvent =
   | PlanCreatedEvent
   | PlanDriftDetectedEvent
   | ModelEscalatedEvent
-  | HandoffCreatedEvent;
+  | HandoffCreatedEvent
+  | ParallelStartedEvent
+  | ParallelAgentStartedEvent
+  | ParallelAgentProgressEvent
+  | ParallelAgentCompletedEvent
+  | ParallelReviewStartedEvent
+  | ParallelReviewCompletedEvent
+  | ParallelReconciliationStartedEvent
+  | ParallelReconciliationCompletedEvent
+  | ParallelWorktreeCleanedEvent;
 
 export type EventType = ForgeEvent['type'];
