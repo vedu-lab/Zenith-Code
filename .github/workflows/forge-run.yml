@@ -1,4 +1,4 @@
-name: Forge Headless Agent Run
+name: Zenith Code Headless Agent Run
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
         default: 300000
 
 jobs:
-  forge-run:
+  zenith-run:
     name: Run Task Headless
     runs-on: ubuntu-latest
     permissions:
@@ -41,10 +41,10 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Forge
+      - name: Build Zenith Code
         run: pnpm build
 
-      - name: Execute Forge Headless
+      - name: Execute Zenith Code Headless
         id: run_forge
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

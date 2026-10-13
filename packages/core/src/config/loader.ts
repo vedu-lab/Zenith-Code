@@ -40,36 +40,40 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Forge
   const env = options.env ?? process.env;
   let merged: Record<string, unknown> = {};
 
-  // 1. Load global config: ~/.forge/config.json
+  // 1. Load global config: ~/.zenith/config.json or ~/.forge/config.json
   const home = options.homeDir ?? env['HOME'] ?? env['USERPROFILE'] ?? '';
   if (home && options.fs) {
-    const globalConfigPath = path.join(home, '.forge', 'config.json');
-    if (await options.fs.exists(globalConfigPath)) {
-      try {
-        const raw = await options.fs.readFile(globalConfigPath);
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        merged = deepMerge(merged, parsed);
-      } catch (err) {
-        throw new ConfigError(`Failed to parse global config at ${globalConfigPath}`, {
-          cause: err,
-        });
+    for (const sub of ['.zenith', '.forge']) {
+      const globalConfigPath = path.join(home, sub, 'config.json');
+      if (await options.fs.exists(globalConfigPath)) {
+        try {
+          const raw = await options.fs.readFile(globalConfigPath);
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          merged = deepMerge(merged, parsed);
+        } catch (err) {
+          throw new ConfigError(`Failed to parse global config at ${globalConfigPath}`, {
+            cause: err,
+          });
+        }
       }
     }
   }
 
-  // 2. Load project config: <projectRoot>/.forge/config.json
+  // 2. Load project config: <projectRoot>/.zenith/config.json or .forge/config.json
   const projectRoot = options.projectRoot ?? process.cwd();
   if (options.fs) {
-    const projectConfigPath = path.join(projectRoot, '.forge', 'config.json');
-    if (await options.fs.exists(projectConfigPath)) {
-      try {
-        const raw = await options.fs.readFile(projectConfigPath);
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        merged = deepMerge(merged, parsed);
-      } catch (err) {
-        throw new ConfigError(`Failed to parse project config at ${projectConfigPath}`, {
-          cause: err,
-        });
+    for (const sub of ['.zenith', '.forge']) {
+      const projectConfigPath = path.join(projectRoot, sub, 'config.json');
+      if (await options.fs.exists(projectConfigPath)) {
+        try {
+          const raw = await options.fs.readFile(projectConfigPath);
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          merged = deepMerge(merged, parsed);
+        } catch (err) {
+          throw new ConfigError(`Failed to parse project config at ${projectConfigPath}`, {
+            cause: err,
+          });
+        }
       }
     }
   }
@@ -94,17 +98,36 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Forge
       },
     },
     models: {
-      main: env['FORGE_MAIN_MODEL'] ?? env['FORGE_MODEL'],
-      fast: env['FORGE_FAST_MODEL'],
-      planner: env['FORGE_PLANNER_MODEL'],
-      summarizer: env['FORGE_SUMMARIZER_MODEL'],
-      autocomplete: env['FORGE_AUTOCOMPLETE_MODEL'],
+      main:
+        env['ZENITH_MAIN_MODEL'] ??
+        env['ZENITH_MODEL'] ??
+        env['FORGE_MAIN_MODEL'] ??
+        env['FORGE_MODEL'],
+      fast: env['ZENITH_FAST_MODEL'] ?? env['FORGE_FAST_MODEL'],
+      planner: env['ZENITH_PLANNER_MODEL'] ?? env['FORGE_PLANNER_MODEL'],
+      summarizer: env['ZENITH_SUMMARIZER_MODEL'] ?? env['FORGE_SUMMARIZER_MODEL'],
+      autocomplete: env['ZENITH_AUTOCOMPLETE_MODEL'] ?? env['FORGE_AUTOCOMPLETE_MODEL'],
     },
     agent: {
-      maxTurns: env['FORGE_MAX_TURNS'] ? Number(env['FORGE_MAX_TURNS']) : undefined,
+      maxTurns: env['ZENITH_MAX_TURNS']
+        ? Number(env['ZENITH_MAX_TURNS'])
+        : env['FORGE_MAX_TURNS']
+          ? Number(env['FORGE_MAX_TURNS'])
+          : undefined,
       headless:
-        env['FORGE_HEADLESS'] === 'true' || env['FORGE_HEADLESS'] === '1' ? true : undefined,
-      json: env['FORGE_JSON'] === 'true' || env['FORGE_JSON'] === '1' ? true : undefined,
+        env['ZENITH_HEADLESS'] === 'true' ||
+        env['ZENITH_HEADLESS'] === '1' ||
+        env['FORGE_HEADLESS'] === 'true' ||
+        env['FORGE_HEADLESS'] === '1'
+          ? true
+          : undefined,
+      json:
+        env['ZENITH_JSON'] === 'true' ||
+        env['ZENITH_JSON'] === '1' ||
+        env['FORGE_JSON'] === 'true' ||
+        env['FORGE_JSON'] === '1'
+          ? true
+          : undefined,
     },
   };
 

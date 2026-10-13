@@ -1,6 +1,6 @@
-# Forge Performance & Latency Profile
+# Zenith Code Performance & Latency Profile
 
-This document details latency benchmarks, profiling observations, identified bottlenecks, and optimizations across the Forge architecture.
+This document details latency benchmarks, profiling observations, identified bottlenecks, and optimizations across the Zenith Code architecture.
 
 ---
 

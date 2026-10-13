@@ -1,6 +1,6 @@
-# Forge System Architecture
+# Zenith Code System Architecture
 
-Forge is an open-source, model-agnostic terminal AI coding agent built with strict modularity, deterministic state transitions, and a defense-in-depth safety engine.
+Zenith Code (cli: `zenith` / `forge`) is an open-source, model-agnostic terminal AI coding agent built with strict modularity, deterministic state transitions, and a defense-in-depth safety engine.
 
 ```mermaid
 graph TD

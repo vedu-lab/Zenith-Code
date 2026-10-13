@@ -1,6 +1,6 @@
-# Contributing to Forge
+# Contributing to Zenith Code
 
-Thank you for contributing to Forge! This project adheres to strict engineering standards to ensure high reliability, zero silent state mutations, and safety by default.
+Thank you for contributing to Zenith Code! This project adheres to strict engineering standards to ensure high reliability, zero silent state mutations, and safety by default.
 
 ---
 
@@ -13,8 +13,8 @@ Thank you for contributing to Forge! This project adheres to strict engineering 
 Clone and install dependencies:
 
 ```bash
-git clone https://github.com/forge-agent/forge.git
-cd forge
+git clone https://github.com/zenith-code/zenith.git
+cd zenith
 pnpm install
 ```
 

@@ -1,6 +1,6 @@
-# Forge Security Model & Sandbox Disclosure
+# Zenith Code Security Model & Sandbox Disclosure
 
-Security and deterministic governance are founding principles of Forge. This document provides an honest, transparent assessment of our security architecture, policy engine, and the precise operating system sandbox boundaries across Linux, macOS, and Windows.
+Security and deterministic governance are founding principles of Zenith Code. This document provides an honest, transparent assessment of our security architecture, policy engine, and the precise operating system sandbox boundaries across Linux, macOS, and Windows.
 
 ---
 

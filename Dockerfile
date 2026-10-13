@@ -30,7 +30,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-# Set entrypoint to Forge CLI
+# Set entrypoint to Zenith Code CLI
 ENV NODE_ENV=production
 ENTRYPOINT ["node", "packages/cli/dist/index.js"]
 CMD ["--help"]

@@ -1,12 +1,12 @@
 # Changelog
 
-All notable changes to the Forge project are documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and [Conventional Commits](https://www.conventionalcommits.org/).
+All notable changes to the Zenith Code project are documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and [Conventional Commits](https://www.conventionalcommits.org/).
 
 ## [0.1.0] - 2026-10-13
 
 ### Highlights
 
-- Initial release of **Forge**, an open-source, model-agnostic terminal AI coding agent.
+- Initial release of **Zenith Code** (cli: `zenith` / `forge`), an open-source, model-agnostic terminal AI coding agent.
 - Strict security by default: Capability-based permissions, OS sandboxing (Landlock, Seatbelt, Windows Job Objects), tamper-evident SHA-256 audit log.
 - First-class cross-platform support across Linux, macOS, and native Windows (without WSL).
 - SQLite-backed checkpoint trees and byte-identical time travel using shadow git.

@@ -1,6 +1,6 @@
-# Forge Benchmark & Evaluation Suite
+# Zenith Code Benchmark & Evaluation Suite
 
-This document presents empirical benchmark measurements for Forge across SWE-bench Verified, Terminal-Bench, Aider Polyglot, and our internal Trust & Trap evaluation suite.
+This document presents empirical benchmark measurements for Zenith Code across SWE-bench Verified, Terminal-Bench, Aider Polyglot, and our internal Trust & Trap evaluation suite.
 
 > **Integrity Policy**: We make **no unverified parity claims**. Every number published here reflects actual automated executions using pinned dataset versions, fixed random seeds, and reproducible harnesses. Transcripts for all runs are preserved in `.forge/benchmarks/`.
 
