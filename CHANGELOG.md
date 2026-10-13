@@ -6,7 +6,7 @@ All notable changes to the Forge project are documented in this file following [
 
 ### Highlights
 
-- Initial release of **Forge**, an open-source, model-agnostic terminal AI coding agent inspired by Claude Code.
+- Initial release of **Forge**, an open-source, model-agnostic terminal AI coding agent.
 - Strict security by default: Capability-based permissions, OS sandboxing (Landlock, Seatbelt, Windows Job Objects), tamper-evident SHA-256 audit log.
 - First-class cross-platform support across Linux, macOS, and native Windows (without WSL).
 - SQLite-backed checkpoint trees and byte-identical time travel using shadow git.

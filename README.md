@@ -1,7 +1,7 @@
 # Zenith Code
 
 <p align="center">
-  <strong>An open-source, model-agnostic terminal AI coding agent inspired by Claude Code.</strong><br>
+  <strong>An open-source, model-agnostic terminal AI coding agent.</strong><br>
   <em>Safe by default. First-class Windows, macOS, Linux, and CI support. Deterministic and observable.</em>
 </p>
 

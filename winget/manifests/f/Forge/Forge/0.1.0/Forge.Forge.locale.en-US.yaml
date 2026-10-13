@@ -10,7 +10,7 @@ PackageUrl: https://github.com/forge-agent/forge
 License: Apache-2.0
 LicenseUrl: https://github.com/forge-agent/forge/blob/main/LICENSE
 ShortDescription: Model-agnostic terminal AI coding agent with first-class Windows support
-Description: Forge is an open-source, model-agnostic terminal AI coding agent inspired by Claude Code. Features native Windows support, sandboxing, capability-based security, SQLite checkpoints, and deterministic replay.
+Description: Forge is an open-source, model-agnostic terminal AI coding agent. Features native Windows support, sandboxing, capability-based security, SQLite checkpoints, and deterministic replay.
 Tags:
   - ai
   - agent
