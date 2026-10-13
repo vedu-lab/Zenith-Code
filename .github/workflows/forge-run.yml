@@ -1,0 +1,69 @@
+name: Forge Headless Agent Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task description to run'
+        required: true
+        type: string
+        default: 'Review pull request changes and run verification'
+      timeout_ms:
+        description: 'Timeout in milliseconds'
+        required: false
+        type: number
+        default: 300000
+
+jobs:
+  forge-run:
+    name: Run Task Headless
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Forge
+        run: pnpm build
+
+      - name: Execute Forge Headless
+        id: run_forge
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FORGE_POLICY_FILE: .forge/policy.json
+          FORGE_JSON: 'true'
+          FORGE_HEADLESS: 'true'
+        run: |
+          pnpm forge run "${{ inputs.task }}" \
+            --headless \
+            --json \
+            --policy .forge/policy.json \
+            --timeout ${{ inputs.timeout_ms }} \
+            --output-dir .forge/artifacts/ci
+
+      - name: Upload Run Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-ci-artifacts
+          path: .forge/artifacts/ci/
+          retention-days: 14

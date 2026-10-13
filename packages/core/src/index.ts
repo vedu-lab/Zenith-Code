@@ -9,3 +9,5 @@ export * from './engine/index.js';
 export * from './headless/index.js';
 export * from './trust/index.js';
 export * from './parallel/index.js';
+export * from './mcp/index.js';
+export * from './platform/index.js';

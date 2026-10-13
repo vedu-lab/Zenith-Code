@@ -45,10 +45,18 @@ export function parsePattern(pattern: string): ParsedPattern | null {
   }
 }
 
+const GLOB_REGEX_CACHE = new Map<string, RegExp>();
+
 /**
  * Converts a glob pattern like `src/**` or `*.ts` or `git *` into a regular expression.
  */
 export function globToRegex(glob: string, isPath = true): RegExp {
+  const cacheKey = `${isPath ? 'p:' : 's:'}${glob}`;
+  const cached = GLOB_REGEX_CACHE.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   let regexStr = '';
   let i = 0;
 
@@ -85,7 +93,9 @@ export function globToRegex(glob: string, isPath = true): RegExp {
     }
   }
 
-  return new RegExp(`^${regexStr}$`, 'i');
+  const compiled = new RegExp(`^${regexStr}$`, 'i');
+  GLOB_REGEX_CACHE.set(cacheKey, compiled);
+  return compiled;
 }
 
 /**

@@ -1,12 +1,19 @@
 import path from 'node:path';
 import { IFileSystem } from '../interfaces/index.js';
 
+import {
+  detectShellEnvironment,
+  getPlatformPromptContext,
+  ShellEnvironmentInfo,
+} from '../platform/index.js';
+
 export type PromptVariant = 'standard' | 'compact' | 'strict';
 
 export interface PromptBuilderOptions {
   readonly variant?: PromptVariant | undefined;
   readonly projectRoot?: string | undefined;
   readonly customInstructions?: string | undefined;
+  readonly shellInfo?: ShellEnvironmentInfo | undefined;
 }
 
 export const CONTEXT_FILE_PRECEDENCE = [
@@ -25,16 +32,18 @@ export class SystemPromptBuilder {
   async build(options: PromptBuilderOptions = {}): Promise<string> {
     const variant = options.variant ?? 'standard';
     const basePrompt = this.getBasePrompt(variant);
+    const shellInfo = options.shellInfo ?? detectShellEnvironment();
+    const platformContext = getPlatformPromptContext(shellInfo);
     const contextContent = await this.loadProjectContext(options.projectRoot ?? this.projectRoot);
 
-    const parts: string[] = [basePrompt];
+    const parts: string[] = [basePrompt, `## PLATFORM CONTEXT\n${platformContext}`];
 
     if (contextContent) {
-      parts.push(`\n## PROJECT INSTRUCTIONS & CONVENTIONS\n${contextContent}`);
+      parts.push(`## PROJECT INSTRUCTIONS & CONVENTIONS\n${contextContent}`);
     }
 
     if (options.customInstructions) {
-      parts.push(`\n## USER INSTRUCTIONS\n${options.customInstructions}`);
+      parts.push(`## USER INSTRUCTIONS\n${options.customInstructions}`);
     }
 
     return parts.join('\n\n');
@@ -88,14 +97,24 @@ CORE OPERATING RULES:
     }
   }
 
+  private readonly contextCache = new Map<string, { mtimeMs: number; content: string }>();
+
   async loadProjectContext(root: string): Promise<string | undefined> {
     for (const filename of CONTEXT_FILE_PRECEDENCE) {
       const filePath = path.join(root, filename);
       if (await this.fs.exists(filePath)) {
         try {
+          const stat = await this.fs.stat(filePath);
+          const cached = this.contextCache.get(filePath);
+          if (cached && cached.mtimeMs === stat.mtimeMs) {
+            return cached.content;
+          }
+
           const content = await this.fs.readFile(filePath);
           if (content.trim()) {
-            return `[Loaded from ${filename}]\n${content.trim()}`;
+            const formatted = `[Loaded from ${filename}]\n${content.trim()}`;
+            this.contextCache.set(filePath, { mtimeMs: stat.mtimeMs, content: formatted });
+            return formatted;
           }
         } catch {
           // Ignore read error and try next

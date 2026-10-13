@@ -18,4 +18,5 @@ export * from './components/RewindPicker.js';
 export * from './components/MemoryBrowser.js';
 export * from './components/ParallelDashboard.js';
 export * from './components/ReviewerReportView.js';
+export * from './components/TimelineViewer.js';
 export * from './App.js';

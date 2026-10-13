@@ -61,4 +61,48 @@ describe('CLI Subcommands & Estimation Integration', () => {
     expect(logged).toContain('"totalTokens"');
     expect(logged).toContain('"totalCostUsd"');
   });
+
+  it('runs forge doctor and returns diagnostic report', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await runCli(['doctor']);
+
+    expect(process.exitCode).toBe(0);
+    const logged = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(logged).toContain('=== Forge Doctor: System & Environment Diagnostics ===');
+    expect(logged).toContain('[Runtime] Node.js Version:');
+    expect(logged).toContain('[Operating System] OS & Active Shell:');
+    expect(logged).toContain('[Safety & Sandbox] Isolation Engine:');
+  });
+
+  it('runs forge replay on a session file and verifies turns', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    // Create a mock session file
+    const sessionDir = path.join(tmpDir, '.forge', 'sessions');
+    fs.mkdirSync(sessionDir, { recursive: true });
+    const sessionPath = path.join(sessionDir, 'test-replay-sess.json');
+    fs.writeFileSync(
+      sessionPath,
+      JSON.stringify({
+        id: 'test-replay-sess',
+        title: 'Replay Test',
+        turns: [
+          {
+            turnIndex: 1,
+            userMessage: 'Test prompt',
+            modelOutput: 'I will run command.',
+            toolCalls: [],
+          },
+        ],
+      }),
+    );
+
+    await runCli(['replay', 'test-replay-sess']);
+
+    expect(process.exitCode).toBe(0);
+    const logged = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(logged).toContain('Replaying Session: test-replay-sess');
+    expect(logged).toContain('Replay completed successfully. All 1 turns verified.');
+  });
 });

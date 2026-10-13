@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  forge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - FORGE_HEADLESS=true
+      - FORGE_JSON=true
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    command: ['run', 'Inspect workspace and report findings', '--headless', '--json']

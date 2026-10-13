@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.en-US.1.6.0.schema.json
+PackageIdentifier: Forge.Forge
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Forge AI
+PublisherUrl: https://github.com/forge-agent/forge
+PublisherSupportUrl: https://github.com/forge-agent/forge/issues
+PackageName: Forge
+PackageUrl: https://github.com/forge-agent/forge
+License: Apache-2.0
+LicenseUrl: https://github.com/forge-agent/forge/blob/main/LICENSE
+ShortDescription: Model-agnostic terminal AI coding agent with first-class Windows support
+Description: Forge is an open-source, model-agnostic terminal AI coding agent inspired by Claude Code. Features native Windows support, sandboxing, capability-based security, SQLite checkpoints, and deterministic replay.
+Tags:
+  - ai
+  - agent
+  - terminal
+  - coding
+  - llm
+  - developer-tools
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

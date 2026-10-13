@@ -2,19 +2,23 @@ export * from './io/filesystem.js';
 export * from './io/process-runner.js';
 export * from './bootstrap.js';
 
+import fs from 'node:fs';
 import path from 'node:path';
-import { PolicyMode, runSandboxDoctor, verifyAuditFile } from '@forge/safety';
+import { PolicyMode, verifyAuditFile } from '@forge/safety';
 import { initProject, CostEstimator } from '@forge/state';
+import { SessionReplayEngine, SessionDataToReplay, ReplayTurn } from '@forge/core';
 import { bootstrapApp } from './bootstrap.js';
+import { runEnhancedDoctor } from './commands/doctor.js';
 
 export interface CliArgs {
-  readonly command: 'run' | 'doctor' | 'caps' | 'audit' | 'init' | 'usage';
+  readonly command: 'run' | 'doctor' | 'caps' | 'audit' | 'init' | 'usage' | 'replay';
   readonly subcommand?: string | undefined;
   readonly task: string;
   readonly headless: boolean;
   readonly json: boolean;
   readonly offline: boolean;
   readonly estimate: boolean;
+  readonly liveTools: boolean;
   readonly since?: string | undefined;
   readonly mode?: PolicyMode | undefined;
   readonly model?: string | undefined;
@@ -24,13 +28,14 @@ export interface CliArgs {
 
 export function parseCliArgs(argv: readonly string[]): CliArgs {
   const args = [...argv];
-  let command: 'run' | 'doctor' | 'caps' | 'audit' | 'init' | 'usage' = 'run';
+  let command: 'run' | 'doctor' | 'caps' | 'audit' | 'init' | 'usage' | 'replay' = 'run';
   let subcommand: string | undefined = undefined;
   let task = '';
   let headless = false;
   let json = false;
   let offline = false;
   let estimate = false;
+  let liveTools = false;
   let since: string | undefined = undefined;
   let mode: PolicyMode | undefined = undefined;
   let model: string | undefined = undefined;
@@ -57,6 +62,10 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
       if (i + 1 < args.length && !args[i + 1]!.startsWith('-')) {
         subcommand = args[++i];
       }
+    } else if (arg === 'replay') {
+      command = 'replay';
+    } else if (arg === '--live-tools') {
+      liveTools = true;
     } else if (arg === '--headless') {
       headless = true;
     } else if (arg === '--json') {
@@ -74,7 +83,7 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
     } else if (arg === '--max-turns' && i + 1 < args.length) {
       maxTurns = Number(args[++i]);
     } else if (!arg.startsWith('-')) {
-      if (!task && command === 'run') {
+      if (!task && (command === 'run' || command === 'replay')) {
         task = arg;
       } else {
         extraArgs.push(arg);
@@ -90,6 +99,7 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
     json,
     offline,
     estimate,
+    liveTools,
     since,
     mode,
     model,
@@ -103,20 +113,27 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
 
   // Command 1: forge doctor
   if (parsed.command === 'doctor') {
-    const report = runSandboxDoctor();
+    const report = await runEnhancedDoctor();
     // eslint-disable-next-line no-console
-    console.log('=== Forge Doctor: System & Sandbox Diagnostics ===');
+    console.log('=== Forge Doctor: System & Environment Diagnostics ===');
+    for (const item of report.checks) {
+      const statusIcon = item.passed ? '✔' : '✖';
+      // eslint-disable-next-line no-console
+      console.log(`[${statusIcon}] [${item.category}] ${item.name}: ${item.value}`);
+      if (item.details) {
+        // eslint-disable-next-line no-console
+        console.log(`    ↳ ${item.details}`);
+      }
+    }
     // eslint-disable-next-line no-console
-    console.log(`OS: ${report.os}`);
+    console.log('------------------------------------------------------');
     // eslint-disable-next-line no-console
-    console.log(`Active Sandbox Backend: ${report.activeBackend}`);
-    // eslint-disable-next-line no-console
-    console.log(`Kernel Sandboxed: ${report.isOsSandboxed ? 'YES' : 'NO'}`);
-    // eslint-disable-next-line no-console
-    console.log(`Status: ${report.message}`);
-    // eslint-disable-next-line no-console
-    console.log(`Available Isolation Layers: ${report.availableBackends.join(', ')}`);
-    process.exitCode = 0;
+    console.log(
+      report.allPassed
+        ? 'System is fully ready for Forge.'
+        : 'Some recommended tools or services are missing.',
+    );
+    process.exitCode = report.allPassed ? 0 : 1;
     return;
   }
 
@@ -240,7 +257,110 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  // Command 6: forge run "<task>"
+  // Command 6: forge replay <sessionId> [--live-tools]
+  if (parsed.command === 'replay') {
+    const sessionId = parsed.task || parsed.extraArgs[0];
+    if (!sessionId) {
+      console.error(
+        'Error: Provide session ID or file path: forge replay <sessionId> [--live-tools]',
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const container = await bootstrapApp();
+    let sessionData: SessionDataToReplay | null = null;
+
+    let sessionFilePath = sessionId;
+    if (!fs.existsSync(sessionFilePath)) {
+      sessionFilePath = path.join(process.cwd(), '.forge', 'sessions', `${sessionId}.json`);
+    }
+
+    if (fs.existsSync(sessionFilePath)) {
+      try {
+        const raw = fs.readFileSync(sessionFilePath, 'utf8');
+        const parsedJson = JSON.parse(raw) as {
+          id?: string;
+          title?: string;
+          turns?: readonly ReplayTurn[];
+          messages?: ReadonlyArray<{ role?: string; content?: string }>;
+          toolCalls?: ReadonlyArray<{
+            id?: string;
+            toolName?: string;
+            parameters?: Record<string, unknown>;
+            output?: unknown;
+            turnIndex?: number;
+          }>;
+        };
+
+        const turns: ReplayTurn[] = parsedJson.turns
+          ? [...parsedJson.turns]
+          : (parsedJson.messages ?? []).map((m, i) => ({
+              turnIndex: i + 1,
+              userMessage: m.role === 'user' ? m.content : undefined,
+              modelOutput: m.role === 'assistant' ? (m.content ?? '') : '',
+              toolCalls: (parsedJson.toolCalls ?? [])
+                .filter((tc) => tc.turnIndex === i + 1)
+                .map((tc) => ({
+                  id: tc.id ?? `call-${i}`,
+                  toolName: tc.toolName ?? 'unknown',
+                  parameters: tc.parameters ?? {},
+                  output: tc.output,
+                })),
+            }));
+
+        sessionData = {
+          id: parsedJson.id ?? sessionId,
+          title: parsedJson.title,
+          turns,
+        };
+      } catch (err) {
+        console.error(`Failed to load session file ${sessionFilePath}:`, err);
+        process.exitCode = 1;
+        return;
+      }
+    }
+
+    if (!sessionData) {
+      console.error(`Session '${sessionId}' not found in .forge/sessions/ or specified path.`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const replayEngine = new SessionReplayEngine(container.eventBus);
+    // eslint-disable-next-line no-console
+    console.log(
+      `=== Replaying Session: ${sessionData.id} (${sessionData.turns.length} turns, liveTools=${parsed.liveTools}) ===`,
+    );
+
+    const result = await replayEngine.replay(sessionData, {
+      liveTools: parsed.liveTools,
+      toolRegistry: container.tools,
+      onStep: (turn) => {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[Turn ${turn.turnIndex}] Model: ${turn.modelOutput.slice(0, 80)}... (${turn.toolCalls.length} tool calls)`,
+        );
+      },
+    });
+
+    if (result.driftDetected) {
+      console.warn(
+        `[DRIFT DETECTED] ${result.drifts.length} tool calls drifted from recorded outputs:`,
+      );
+      for (const d of result.drifts) {
+        console.warn(`  - [Turn ${d.turnIndex}] ${d.toolName}: ${d.diffDescription}`);
+      }
+      process.exitCode = 1;
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(`✔ Replay completed successfully. All ${result.turnsReplayed} turns verified.`);
+      process.exitCode = 0;
+    }
+    return;
+  }
+
+  // Command 7: forge run "<task>"
   if (!parsed.task) {
     // eslint-disable-next-line no-console
     console.log(
