@@ -55,15 +55,19 @@ export class UsageLedger {
 
     if (this.eventBus) {
       this.eventBus.subscribe('usage.updated', (event) => {
-        if (event.type === 'usage.updated' && event.actor !== 'ledger') {
+        if (event.type === 'usage.updated' && !event.id.startsWith('evt-ledger-')) {
           const payload = event.payload;
           void this.recordUsage({
             sessionId: payload.sessionId,
             model: payload.model,
             promptTokens: payload.inputTokens,
             completionTokens: payload.outputTokens,
-            cacheReadTokens: payload.cacheReadTokens,
-            cacheWriteTokens: payload.cacheWriteTokens,
+            ...(payload.cacheReadTokens !== undefined
+              ? { cacheReadTokens: payload.cacheReadTokens }
+              : {}),
+            ...(payload.cacheWriteTokens !== undefined
+              ? { cacheWriteTokens: payload.cacheWriteTokens }
+              : {}),
           });
         }
       });
@@ -203,7 +207,7 @@ export class UsageLedger {
 
     if (this.eventBus) {
       await this.eventBus.publish({
-        id: `evt-usage-${record.id}`,
+        id: `evt-ledger-${record.id}`,
         type: 'usage.updated',
         timestamp: record.timestamp,
         actor: 'system',

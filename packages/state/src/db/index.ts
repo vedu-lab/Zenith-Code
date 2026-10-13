@@ -84,9 +84,7 @@ export class SqliteStore {
     } catch {
       try {
         const req = createRequire(import.meta.url);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const { DatabaseSync } = req('node:sqlite');
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
         const dbSync = new DatabaseSync(filename, { readOnly: options.readonly ?? false });
         this.db = new NodeSqliteWrapper(dbSync);
       } catch {
